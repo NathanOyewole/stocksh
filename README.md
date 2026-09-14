@@ -1,33 +1,66 @@
 # STOCK.sh — Terminal xStocks on Solana
 
-> Blazing-fast, keyboard-only terminal execution engine for tokenized stocks (xStocks) on Solana.
+Keyboard-only TUI for trading tokenized stocks (xStocks) on Solana.
+Built for **Stocklana** hackathon.
 
-Built for **Stocklana** · Sept 11–18 2026 · $100K prize pool
-
-## Quick Start
+## Install
 
 ```bash
 git clone https://github.com/NathanOyewole/stocksh.git
 cd stocksh
-cp .env.example .env   # optional: add SOLANA_PRIVATE_KEY
 go mod tidy
 go build -o stocksh .
-./stocksh              # Windows: stocksh.exe
+# Windows:
+go build -o stocksh.exe .
+```
+
+## Run
+
+```bash
+./stocksh          # Linux/Mac
+.\stocksh.exe      # Windows
+```
+
+Defaults: **Devnet + Dry-run**. Live prices from Jupiter mainnet.
+
+### Optional .env
+
+```bash
+cp .env.example .env
+# then edit:
+# SOLANA_PRIVATE_KEY=your_base58_key
+# SOLANA_RPC=https://api.devnet.solana.com
+# STOCKSH_LIVE=0
 ```
 
 ## Controls
 
 | Key | Action |
 |-----|--------|
-| ↑↓ / jk | Navigate |
-| Enter | Quote |
-| +/- | Size |
-| s | Buy/Sell toggle |
-| y | Confirm |
+| ↑↓ / j k | Navigate |
+| Enter | Get quote |
+| +/- | Change size |
+| s | Toggle BUY/SELL |
+| y | Confirm / prepare tx |
 | p | Portfolio |
 | ? / h | Help |
 | r | Refresh |
-| a | Airdrop (Devnet) |
+| a | Airdrop 1 SOL (Devnet) |
+| Esc | Back |
 | q | Quit |
 
-Defaults: **Devnet + Dry-run**. Live prices from Jupiter mainnet.
+## Structure
+
+```
+stocksh/
+├── main.go
+├── ui/          # Bubbletea TUI
+├── jupiter/     # Quotes + swaps
+└── solana/      # Wallet + RPC
+```
+
+## Notes
+
+- xStocks liquidity is **mainnet-only**
+- Dry-run never broadcasts
+- For live: `STOCKSH_LIVE=1` + mainnet RPC + funded key
