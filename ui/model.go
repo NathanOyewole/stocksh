@@ -58,7 +58,7 @@ func InitialModel() Model {
 	order := []string{"NVDAx", "TSLAx", "AAPLx", "METAx", "SPYx", "QQQx", "MSTRx", "CRCLx"}
 	for _, sym := range order {
 		if mint, ok := jupiter.Stocks[sym]; ok {
-			stocks = append(stocks, Ticker{Symbol: sym, Mint: mint, Price: "\u2014", Change: ""})
+			stocks = append(stocks, Ticker{Symbol: sym, Mint: mint, Price: "-", Change: ""})
 		}
 	}
 	dry := os.Getenv("STOCKSH_LIVE") != "1"
@@ -69,7 +69,7 @@ func InitialModel() Model {
 	return Model{
 		mode: viewTickers, tickers: stocks, cursor: 0, amountUSDC: 10.0,
 		jup: jupiter.NewClient(), dryRun: dry, network: net, side: "buy",
-		status: "Ready \u00b7 \u2191\u2193 select \u00b7 Enter quote \u00b7 p portfolio \u00b7 ? help \u00b7 q quit",
+		status: "Ready - up/down select - Enter quote - p portfolio - ? help - q quit",
 		styles: NewStyles(),
 	}
 }
@@ -180,7 +180,7 @@ func (m Model) executeSwap() tea.Cmd {
 		}
 		if m.dryRun || m.network == "devnet" {
 			return swapResultMsg{
-				sig: fmt.Sprintf("DRY-RUN OK \u00b7 tx prepared (%d bytes)", len(swapResp.SwapTransaction)),
+				sig: fmt.Sprintf("DRY-RUN OK - tx prepared (%d bytes)", len(swapResp.SwapTransaction)),
 				err: nil,
 			}
 		}
@@ -215,17 +215,42 @@ type Styles struct {
 
 func NewStyles() Styles {
 	return Styles{
-		Title:    lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00FF9F")).MarginBottom(1),
-		Selected: lipgloss.NewStyle().Foreground(lipgloss.Color("#000000")).Background(lipgloss.Color("#00FF9F")).Bold(true).Padding(0, 1),
-		Normal:   lipgloss.NewStyle().Foreground(lipgloss.Color("#E0E0E0")).Padding(0, 1),
-		Status:   lipgloss.NewStyle().Foreground(lipgloss.Color("#888888")).MarginTop(1),
-		Error:    lipgloss.NewStyle().Foreground(lipgloss.Color("#FF4444")).Bold(true),
-		Success:  lipgloss.NewStyle().Foreground(lipgloss.Color("#00FF9F")).Bold(true),
-		Border:   lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#00FF9F")),
-		Dim:      lipgloss.NewStyle().Foreground(lipgloss.Color("#555555")),
-		Header:   lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00D4FF")),
-		Green:    lipgloss.NewStyle().Foreground(lipgloss.Color("#00FF9F")),
-		Cyan:     lipgloss.NewStyle().Foreground(lipgloss.Color("#00D4FF")),
-		Yellow:   lipgloss.NewStyle().Foreground(lipgloss.Color("#FFD700")),
+		Title: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("#00FF9F")).
+			Padding(0, 1),
+		Selected: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#000000")).
+			Background(lipgloss.Color("#00FF9F")).
+			Bold(true).
+			Padding(0, 2),
+		Normal: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#F0F0F0")).
+			Padding(0, 2),
+		Status: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#AAAAAA")).
+			Padding(0, 1),
+		Error: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FF5555")).
+			Bold(true),
+		Success: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#00FF9F")).
+			Bold(true),
+		Border: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#00FF9F")).
+			Padding(0, 1),
+		Dim: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#777777")),
+		Header: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("#00D4FF")).
+			Padding(0, 1),
+		Green: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#00FF9F")),
+		Cyan: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#00D4FF")),
+		Yellow: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FFD700")),
 	}
 }
