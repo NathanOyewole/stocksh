@@ -92,6 +92,16 @@ type TokenBalance struct {
 	Amount float64
 }
 
+// findATA derives the associated token account for a given token program.
+// Works with classic Token and Token-2022 without needing newer SDK helpers.
+func findATA(wallet, mint, tokenProgram solana.PublicKey) (solana.PublicKey, uint8, error) {
+	return solana.FindProgramAddress([][]byte{
+		wallet.Bytes(),
+		tokenProgram.Bytes(),
+		mint.Bytes(),
+	}, solana.SPLAssociatedTokenAccountProgramID)
+}
+
 func GetTokenBalances(client *rpc.Client, owner solana.PublicKey, mintToSymbol map[string]string) ([]TokenBalance, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -102,15 +112,9 @@ func GetTokenBalances(client *rpc.Client, owner solana.PublicKey, mintToSymbol m
 			continue
 		}
 		for _, programID := range []solana.PublicKey{solana.TokenProgramID, solana.Token2022ProgramID} {
-			ata, _, err := solana.FindAssociatedTokenAddress(owner, mint)
+			ata, _, err := findATA(owner, mint, programID)
 			if err != nil {
 				continue
-			}
-			if programID.Equals(solana.Token2022ProgramID) {
-				ata, _, err = solana.FindAssociatedTokenAddressWithProgram(owner, mint, programID)
-				if err != nil {
-					continue
-				}
 			}
 			balRes, err := client.GetTokenAccountBalance(ctx, ata, rpc.CommitmentConfirmed)
 			if err != nil {
