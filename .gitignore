@@ -1,0 +1,4 @@
+stocksh
+*.exe
+.env
+.DS_Store
