@@ -7,6 +7,35 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// boxWidth returns the total outer width (including the thick border) of the
+// centered panel. Capped so the layout stays readable — and looks intentional
+// rather than edge-to-edge — on very wide terminals.
+func (m Model) boxWidth() int {
+	w := m.width - 6
+	if w > 88 {
+		w = 88
+	}
+	if w < 44 {
+		w = 44
+	}
+	return w
+}
+
+// innerWidth is the usable text width inside the panel (outer box minus the
+// 1-col thick border and the 3-col horizontal padding on each side).
+func (m Model) innerWidth() int {
+	return m.boxWidth() - 8
+}
+
+// spaceBetween justifies left/right within width, padding with spaces.
+func spaceBetween(left, right string, width int) string {
+	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
+	if gap < 1 {
+		gap = 1
+	}
+	return left + strings.Repeat(" ", gap) + right
+}
+
 func (m Model) View() string {
 	if m.width == 0 {
 		return "Loading STOCK.sh..."
@@ -26,37 +55,38 @@ func (m Model) View() string {
 		body = m.viewHelp()
 	}
 
-	netBadge := m.styles.Yellow.Render("[ DEVNET ]")
+	netBadge := m.styles.Yellow.Bold(true).Render("[ DEVNET ]")
 	if m.network == "mainnet" {
-		netBadge = m.styles.Green.Render("[ MAINNET ]")
+		netBadge = m.styles.Green.Bold(true).Render("[ MAINNET ]")
 	}
-	modeBadge := m.styles.Cyan.Render("[ DRY-RUN ]")
+	modeBadge := m.styles.Cyan.Bold(true).Render("[ DRY-RUN ]")
 	if !m.dryRun {
 		modeBadge = m.styles.Error.Render("[ LIVE ]")
 	}
 
-	title := m.styles.Title.Render("  STOCK.sh")
-	subtitle := m.styles.Cyan.Render("  Terminal xStocks")
-	header := lipgloss.JoinHorizontal(lipgloss.Center, title, subtitle, "   ", netBadge, "  ", modeBadge)
+	boxW := m.boxWidth()
+	innerW := m.innerWidth()
 
-	footer := m.styles.Status.Render("  " + m.status)
+	title := m.styles.Title.Render("STOCK.sh")
+	subtitle := m.styles.Cyan.Render(" Terminal xStocks")
+	badges := lipgloss.JoinHorizontal(lipgloss.Center, netBadge, "  ", modeBadge)
+
+	headerLine := spaceBetween(title+subtitle, badges, innerW)
+	rule := m.styles.Dim.Render(strings.Repeat("─", innerW))
+
+	panel := m.styles.Border.Width(boxW - 2).Render(
+		lipgloss.JoinVertical(lipgloss.Left, headerLine, rule, "", body),
+	)
+
+	status := m.styles.Status.Render(m.status)
 	if m.errMsg != "" {
-		footer += "\n" + m.styles.Error.Render("  ERR: "+m.errMsg)
+		status = m.styles.Error.Render("ERR: " + m.errMsg)
 	}
+	footer := lipgloss.PlaceHorizontal(boxW, lipgloss.Center, status)
 
-	panelW := m.width - 2
-	if panelW < 40 {
-		panelW = 40
-	}
-	body = m.styles.Border.Width(panelW).Padding(1, 2).Render(body)
+	stacked := lipgloss.JoinVertical(lipgloss.Center, panel, "", footer)
 
-	content := lipgloss.JoinVertical(lipgloss.Left, "", header, "", body)
-	used := lipgloss.Height(content) + lipgloss.Height(footer) + 2
-	spacer := ""
-	if m.height > used {
-		spacer = strings.Repeat("\n", m.height-used-1)
-	}
-	return content + spacer + "\n" + footer
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, stacked)
 }
 
 func (m Model) viewTickers() string {
@@ -149,7 +179,7 @@ func (m Model) viewResult() string {
 	if m.lastSig != "" {
 		b.WriteString(m.styles.Success.Render("  *  TRADE PREPARED"))
 		b.WriteString("\n\n")
-		for _, line := range wrap(m.lastSig, max(m.width-12, 40)) {
+		for _, line := range wrap(m.lastSig, max(m.innerWidth()-2, 32)) {
 			b.WriteString("  " + line + "\n")
 		}
 		b.WriteString("\n")

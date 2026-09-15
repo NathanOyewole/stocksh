@@ -217,8 +217,9 @@ func NewStyles() Styles {
 	return Styles{
 		Title: lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("#00FF9F")).
-			Padding(0, 1),
+			Foreground(lipgloss.Color("#0B0F0C")).
+			Background(lipgloss.Color("#00FF9F")).
+			Padding(0, 2),
 		Selected: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#000000")).
 			Background(lipgloss.Color("#00FF9F")).
@@ -237,9 +238,9 @@ func NewStyles() Styles {
 			Foreground(lipgloss.Color("#00FF9F")).
 			Bold(true),
 		Border: lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
+			Border(lipgloss.ThickBorder()).
 			BorderForeground(lipgloss.Color("#00FF9F")).
-			Padding(0, 1),
+			Padding(1, 3),
 		Dim: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#777777")),
 		Header: lipgloss.NewStyle().
