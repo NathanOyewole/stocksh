@@ -32,6 +32,7 @@ type Ticker struct {
 	PriceV  float64
 	Change  string
 	ChgV    float64
+	History []float64
 }
 
 type Model struct {
@@ -120,7 +121,7 @@ type pricesMsg struct {
 }
 
 func tickCmd() tea.Cmd {
-	return tea.Tick(time.Second*12, func(t time.Time) tea.Msg { return tickMsg(t) })
+	return tea.Tick(time.Second*5, func(t time.Time) tea.Msg { return tickMsg(t) })
 }
 
 func (m Model) loadWallet() tea.Cmd {

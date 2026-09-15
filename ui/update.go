@@ -87,6 +87,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					} else {
 						m.tickers[i].Change = fmt.Sprintf("%.1f%%", p.PriceChange24h)
 					}
+					m.tickers[i].History = append(t.History, p.USDPrice)
+					if len(m.tickers[i].History) > 42 {
+						m.tickers[i].History = m.tickers[i].History[len(m.tickers[i].History)-42:]
+					}
 				}
 			}
 		}

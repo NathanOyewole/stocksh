@@ -97,6 +97,52 @@ func (m Model) View() string {
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, stacked)
 }
 
+// sparkline renders a compact price-trend bar (▁▂▃▄▅▆▇█) from recent history.
+func sparkline(prices []float64, cols int) string {
+	if len(prices) == 0 {
+		return strings.Repeat(" ", cols)
+	}
+	blocks := []rune("▁▂▃▄▅▆▇█")
+	buckets := make([]float64, cols)
+	counts := make([]int, cols)
+	for i, p := range prices {
+		idx := i * cols / len(prices)
+		buckets[idx] += p
+		counts[idx]++
+	}
+	min, max := prices[0], prices[0]
+	for _, p := range prices {
+		if p < min {
+			min = p
+		}
+		if p > max {
+			max = p
+		}
+	}
+	span := max - min
+	var out strings.Builder
+	for c := 0; c < cols; c++ {
+		avg := float64(0)
+		if counts[c] > 0 {
+			avg = buckets[c] / float64(counts[c])
+		}
+		lvl := 0
+		if span > 0 {
+			lvl = int((avg-min)/span*7 + 0.5)
+			if lvl < 0 {
+				lvl = 0
+			}
+			if lvl > 7 {
+				lvl = 7
+			}
+		} else {
+			lvl = 3 // flat line
+		}
+		out.WriteRune(blocks[lvl])
+	}
+	return out.String()
+}
+
 func (m Model) viewSplash() string {
 	var b strings.Builder
 
@@ -131,9 +177,9 @@ func (m Model) viewTickers() string {
 	}
 	b.WriteString(m.styles.Header.Render(fmt.Sprintf("TICKERS                                    side: %s", sideLabel)))
 	b.WriteString("\n\n")
-	b.WriteString(m.styles.Dim.Render(fmt.Sprintf("  %-10s  %-12s  %-10s  %-12s", "SYMBOL", "PRICE", "24h", "SIZE")))
+	b.WriteString(m.styles.Dim.Render(fmt.Sprintf("  %-10s  %-12s  %-9s  %-7s  %-10s", "SYMBOL", "PRICE", "24h", "TREND", "SIZE")))
 	b.WriteString("\n")
-	b.WriteString(m.styles.Dim.Render("  " + strings.Repeat("-", 52)))
+	b.WriteString(m.styles.Dim.Render("  " + strings.Repeat("-", 58)))
 	b.WriteString("\n\n")
 	for i, t := range m.tickers {
 		price := t.Price
@@ -144,19 +190,22 @@ func (m Model) viewTickers() string {
 		if chg == "" {
 			chg = "-"
 		}
-		row := fmt.Sprintf("  %-10s  %-12s  %-10s  %.0f USDC", t.Symbol, price, chg, m.amountUSDC)
+		spark := sparkline(t.History, 8)
+		row := fmt.Sprintf("  %-10s  %-12s  %-9s  %s  %.0f USDC", t.Symbol, price, chg, spark, m.amountUSDC)
 		if i == m.cursor {
 			b.WriteString(m.styles.Selected.Render(row))
 		} else {
 			prefix := fmt.Sprintf("  %-10s  %-12s  ", t.Symbol, price)
 			b.WriteString(m.styles.Normal.Render(prefix))
 			if strings.HasPrefix(chg, "+") {
-				b.WriteString(m.styles.Green.Render(fmt.Sprintf("%-10s", chg)))
+				b.WriteString(m.styles.Green.Render(fmt.Sprintf("%-9s", chg)))
 			} else if strings.HasPrefix(chg, "-") {
-				b.WriteString(m.styles.Error.Render(fmt.Sprintf("%-10s", chg)))
+				b.WriteString(m.styles.Error.Render(fmt.Sprintf("%-9s", chg)))
 			} else {
-				b.WriteString(m.styles.Dim.Render(fmt.Sprintf("%-10s", chg)))
+				b.WriteString(m.styles.Dim.Render(fmt.Sprintf("%-9s", chg)))
 			}
+			b.WriteString(m.styles.Normal.Render("  "))
+			b.WriteString(m.styles.Cyan.Render(spark))
 			b.WriteString(m.styles.Normal.Render(fmt.Sprintf("  %.0f USDC", m.amountUSDC)))
 		}
 		b.WriteString("\n")
@@ -172,7 +221,7 @@ func (m Model) viewTickers() string {
 	b.WriteString("\n\n")
 	b.WriteString(m.styles.Cyan.Render("  Size: ") + m.styles.Green.Bold(true).Render(fmt.Sprintf("%.0f USDC", m.amountUSDC)))
 	b.WriteString("\n")
-	b.WriteString(m.styles.Dim.Render("  Live prices via Jupiter  -  auto-refresh every 12s"))
+	b.WriteString(m.styles.Dim.Render("  Live prices via Jupiter  -  auto-refresh every 5s"))
 	return b.String()
 }
 

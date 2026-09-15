@@ -76,6 +76,10 @@ Every dry-run swap is recorded as a paper position in
 - **Allocation bars** (% of total portfolio value)
 - **24-hour portfolio change** estimate
 
+The ticker screen refreshes prices every **5 seconds** and draws a live
+**trend sparkline** per symbol so you can watch momentum build in real
+time.
+
 In live mode (`STOCKSH_LIVE=1`) real on-chain balances are used,
 and P&L is still computed from whatever history the ledger holds.
 
