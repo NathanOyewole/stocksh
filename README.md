@@ -62,11 +62,25 @@ stocksh/
 ├── main.go
 ├── ui/          # Bubbletea TUI
 ├── jupiter/     # Quotes + swaps
+├── ledger/      # Trade history + position P&L math
 └── solana/      # Wallet + RPC
 ```
+
+## Portfolio & Paper Trading
+
+Every dry-run swap is recorded as a paper position in
+`~/.stocksh/trades.json`. The `p` screen shows:
+
+- Per-token **market value** at live prices
+- **Average cost basis** and **unrealized P&L** ($ and %)
+- **Allocation bars** (% of total portfolio value)
+- **24-hour portfolio change** estimate
+
+In live mode (`STOCKSH_LIVE=1`) real on-chain balances are used,
+and P&L is still computed from whatever history the ledger holds.
 
 ## Notes
 
 - xStocks liquidity is **mainnet-only**
-- Dry-run never broadcasts
+- Dry-run never broadcasts but records paper trades
 - For live: `STOCKSH_LIVE=1` + mainnet RPC + funded key

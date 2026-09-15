@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strconv"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -78,7 +79,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err == nil && msg.prices != nil {
 			for i, t := range m.tickers {
 				if p, ok := msg.prices[t.Mint]; ok {
+					m.tickers[i].PriceV = p.USDPrice
 					m.tickers[i].Price = fmt.Sprintf("$%.2f", p.USDPrice)
+					m.tickers[i].ChgV = p.PriceChange24h
 					if p.PriceChange24h >= 0 {
 						m.tickers[i].Change = fmt.Sprintf("+%.1f%%", p.PriceChange24h)
 					} else {
@@ -111,11 +114,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.errMsg = ""
 		m.status = "READY"
 		m.mode = viewResult
+		m.recordTrade()
 		return m, nil
 	case tickMsg:
 		cmds := []tea.Cmd{tickCmd(), m.fetchAllPrices()}
 		if m.wallet != nil && m.mode == viewPortfolio {
-			cmds = append(cmds, m.fetchBalance(), m.fetchTokens())
+			cmds = append(cmds, m.fetchBalance())
+			if !m.dryRun {
+				cmds = append(cmds, m.fetchTokens())
+			}
 		}
 		return m, tea.Batch(cmds...)
 	}
@@ -158,7 +165,11 @@ func (m Model) updateTickers(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = viewPortfolio
 		m.status = "Portfolio"
 		if m.wallet != nil {
-			return m, tea.Batch(m.fetchBalance(), m.fetchTokens())
+			cmds := []tea.Cmd{m.fetchBalance()}
+			if !m.dryRun {
+				cmds = append(cmds, m.fetchTokens())
+			}
+			return m, tea.Batch(cmds...)
 		}
 		return m, nil
 	case "r":
@@ -212,7 +223,11 @@ func (m Model) updatePortfolio(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.status = "Requesting airdrop..."
 		return m, m.doAirdrop()
 	case "r":
-		return m, tea.Batch(m.fetchBalance(), m.fetchTokens())
+		cmds := []tea.Cmd{m.fetchBalance(), m.fetchAllPrices()}
+		if !m.dryRun {
+			cmds = append(cmds, m.fetchTokens())
+		}
+		return m, tea.Batch(cmds...)
 	}
 	return m, nil
 }
@@ -245,4 +260,32 @@ func truncatePubkey(pk string) string {
 		return pk[:6] + "\u2026" + pk[len(pk)-4:]
 	}
 	return pk
+}
+
+// recordTrade writes the last executed swap into the paper/live ledger so
+// the portfolio has a cost basis to compute P&L from. Amounts come from the
+// Jupiter quote (both are 1e6 lamports).
+func (m *Model) recordTrade() {
+	if m.quote == nil {
+		return
+	}
+	inAmt, err := strconv.ParseUint(m.quote.InAmount, 10, 64)
+	if err != nil || inAmt == 0 {
+		return
+	}
+	outAmt, err := strconv.ParseUint(m.quote.OutAmount, 10, 64)
+	if err != nil || outAmt == 0 {
+		return
+	}
+	var signedQty, price float64
+	if m.side == "buy" {
+		price = float64(inAmt) / float64(outAmt)
+		signedQty = float64(outAmt) / 1_000_000
+	} else {
+		price = float64(outAmt) / float64(inAmt)
+		signedQty = -float64(inAmt) / 1_000_000
+	}
+	if err := m.led.Record(m.selected.Symbol, m.side, signedQty, price); err != nil {
+		m.errMsg = fmt.Sprintf("Could not persist trade: %v", err)
+	}
 }

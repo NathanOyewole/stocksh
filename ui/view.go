@@ -200,7 +200,9 @@ func (m Model) viewConfirm() string {
 	b.WriteString(fmt.Sprintf("  Slippage    %d bps\n", m.quote.SlippageBps))
 	b.WriteString("\n")
 	if m.dryRun || m.network == "devnet" {
-		b.WriteString(m.styles.Yellow.Render("  -> Will prepare tx only (dry-run / devnet)"))
+		b.WriteString(m.styles.Yellow.Render("  -> Dry-run: tx prepared, paper position recorded"))
+		b.WriteString("\n")
+		b.WriteString(m.styles.Dim.Render("     Watch it move in the portfolio (p)"))
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
@@ -238,6 +240,7 @@ func (m Model) viewPortfolio() string {
 		b.WriteString(m.styles.Dim.Render("  Set SOLANA_PRIVATE_KEY in .env"))
 		b.WriteString("\n")
 		b.WriteString(m.styles.Dim.Render("  or place keypair at ~/.config/solana/id.json"))
+		b.WriteString("\n")
 	} else {
 		short := m.wallet.PubKey.String()
 		if len(short) > 16 {
@@ -251,22 +254,11 @@ func (m Model) viewPortfolio() string {
 			b.WriteString("  SOL         loading...\n")
 		}
 		b.WriteString("\n")
-		b.WriteString(m.styles.Header.Render("  xStocks holdings"))
-		b.WriteString("\n\n")
-		if !m.tokensLoaded {
-			b.WriteString(m.styles.Dim.Render("  loading token balances..."))
+		b.WriteString(m.renderPositions())
+		b.WriteString("\n")
+		if m.dryRun {
+			b.WriteString(m.styles.Dim.Render("  Paper portfolio (dry-run) - trades are simulated"))
 			b.WriteString("\n")
-		} else if len(m.tokenBalances) == 0 {
-			b.WriteString(m.styles.Dim.Render("  (none - buy some on the ticker screen)"))
-			b.WriteString("\n")
-			if m.network == "devnet" {
-				b.WriteString(m.styles.Dim.Render("  note: xStocks liquidity is mainnet-only"))
-				b.WriteString("\n")
-			}
-		} else {
-			for _, tb := range m.tokenBalances {
-				b.WriteString(fmt.Sprintf("  %-10s  %s\n", tb.Symbol, m.styles.Green.Bold(true).Render(fmt.Sprintf("%.6f", tb.Amount))))
-			}
 		}
 	}
 	b.WriteString("\n\n")
@@ -275,6 +267,170 @@ func (m Model) viewPortfolio() string {
 	b.WriteString(m.styles.Dim.Render("  r     refresh balances"))
 	b.WriteString("\n")
 	b.WriteString(m.styles.Dim.Render("  Esc / p     back to tickers"))
+	return b.String()
+}
+
+type position struct {
+	Symbol  string
+	Qty     float64
+	Price   float64
+	HasPx   bool
+	Value   float64
+	AvgCost float64
+	PnL     float64
+	PnLPct  float64
+	HasPnL  bool
+	AllocPct float64
+}
+
+func (m Model) renderPositions() string {
+	var b strings.Builder
+
+	// price lookup: symbol -> (price, 24h change)
+	type q struct{ price, chg float64 }
+	px := make(map[string]q)
+	for _, t := range m.tickers {
+		px[t.Symbol] = q{t.PriceV, t.ChgV}
+	}
+
+	var positions []position
+	var totalValue, totalPnL float64
+
+	collect := func(symbol string, qty float64) {
+		if qty <= 0 {
+			return
+		}
+		p := position{Symbol: symbol, Qty: qty}
+		if qi, ok := px[symbol]; ok && qi.price > 0 {
+			p.Price, p.HasPx = qi.price, true
+			p.Value = qty * qi.price
+		}
+		totalValue += p.Value
+
+		h := m.led.Holding(symbol, p.Price)
+		if h.HasBasis && p.Value > 0 {
+			p.AvgCost = h.AvgCost
+			p.PnL = h.PnL
+			p.PnLPct = h.PnLPct
+			p.HasPnL = true
+			totalPnL += h.PnL
+		}
+		positions = append(positions, p)
+	}
+
+	if m.dryRun {
+		// Paper mode: positions come from the ledger.
+		for _, t := range m.tickers {
+			collect(t.Symbol, m.led.NetHolding(t.Symbol))
+		}
+	} else {
+		// Live mode: real on-chain balances.
+		for _, tb := range m.tokenBalances {
+			collect(tb.Symbol, tb.Amount)
+		}
+	}
+
+	// Allocation percentages.
+	for i := range positions {
+		if totalValue > 0 {
+			positions[i].AllocPct = positions[i].Value / totalValue * 100
+		}
+	}
+
+	b.WriteString(m.styles.Header.Render("  xStocks holdings"))
+	b.WriteString("\n\n")
+	if len(positions) == 0 {
+		b.WriteString(m.styles.Dim.Render("  (empty - buy some on the ticker screen)"))
+		b.WriteString("\n")
+		if m.network == "devnet" && !m.dryRun {
+			b.WriteString(m.styles.Dim.Render("  note: xStocks liquidity is mainnet-only"))
+			b.WriteString("\n")
+		}
+		return b.String()
+	}
+
+	// Table header.
+	head := fmt.Sprintf("  %-7s %9s %-9s %-10s %-9s %-6s %s",
+		"SYMBOL", "QTY", "PRICE", "VALUE", "P&L", "P&L%", "ALLOC")
+	b.WriteString(m.styles.Dim.Render(head))
+	b.WriteString("\n")
+	b.WriteString(m.styles.Dim.Render("  " + strings.Repeat("─", 56)))
+	b.WriteString("\n")
+
+	for _, p := range positions {
+		priceS := "–"
+		if p.HasPx {
+			priceS = fmt.Sprintf("$%.2f", p.Price)
+		}
+		valS := "–"
+		if p.Value > 0 {
+			valS = fmt.Sprintf("$%.2f", p.Value)
+		}
+		pnlS := m.styles.Dim.Render("–")
+		if p.HasPnL {
+			if p.PnL >= 0 {
+				pnlS = m.styles.Success.Render(fmt.Sprintf("+$%.2f", p.PnL))
+			} else {
+				pnlS = m.styles.Error.Render(fmt.Sprintf("-$%.2f", -p.PnL))
+			}
+		}
+		pctS := m.styles.Dim.Render("–")
+		if p.HasPnL {
+			if p.PnL >= 0 {
+				pctS = m.styles.Success.Render(fmt.Sprintf("+%.1f%%", p.PnLPct))
+			} else {
+				pctS = m.styles.Error.Render(fmt.Sprintf("%.1f%%", p.PnLPct))
+			}
+		}
+
+		row := fmt.Sprintf("  %-7s %9.5f  %-9s %-10s %-9s %-6s ",
+			p.Symbol, p.Qty, priceS, valS, pnlS, pctS)
+		b.WriteString(row)
+		if p.AllocPct >= 0 {
+			blocks := int(p.AllocPct/100*10 + 0.5)
+			if blocks > 10 {
+				blocks = 10
+			}
+			b.WriteString(m.styles.Cyan.Render(strings.Repeat("█", blocks)))
+			b.WriteString(m.styles.Dim.Render(strings.Repeat("░", 10-blocks)))
+			b.WriteString(fmt.Sprintf(" %2.0f%%", p.AllocPct))
+		}
+		b.WriteString("\n")
+	}
+
+	// Totals.
+	avgTotalCost := totalValue - totalPnL
+	totalPct := 0.0
+	if avgTotalCost > 0 {
+		totalPct = totalPnL / avgTotalCost * 100
+	}
+	b.WriteString(m.styles.Dim.Render("  " + strings.Repeat("─", 56)))
+	b.WriteString("\n")
+	totalLine := fmt.Sprintf("  %-7s %9s  %-9s %-10s ", "TOTAL", "", "", fmt.Sprintf("$%.2f", totalValue))
+	if totalPnL >= 0 {
+		totalLine += m.styles.Success.Render(fmt.Sprintf("+$%.2f", totalPnL))
+	} else {
+		totalLine += m.styles.Error.Render(fmt.Sprintf("-$%.2f", -totalPnL))
+	}
+	totalLine += " " + fmt.Sprintf("%+6.1f%%", totalPct)
+	b.WriteString(totalLine)
+	b.WriteString("\n")
+
+	// 24h portfolio change.
+	var delta24 float64
+	for _, p := range positions {
+		if qi, ok := px[p.Symbol]; ok {
+			delta24 += p.Value * qi.chg / 100
+		}
+	}
+	b.WriteString("\n")
+	if delta24 >= 0 {
+		b.WriteString("  " + m.styles.Green.Render(fmt.Sprintf("Portfolio 24h: +$%.2f", delta24)))
+	} else {
+		b.WriteString("  " + m.styles.Error.Render(fmt.Sprintf("Portfolio 24h: -$%.2f", -delta24)))
+	}
+	b.WriteString("\n")
+
 	return b.String()
 }
 

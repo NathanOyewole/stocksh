@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"stocksh/jupiter"
+	"stocksh/ledger"
 	"stocksh/solana"
 )
 
@@ -25,10 +26,12 @@ const (
 )
 
 type Ticker struct {
-	Symbol string
-	Mint   string
-	Price  string
-	Change string
+	Symbol  string
+	Mint    string
+	Price   string
+	PriceV  float64
+	Change  string
+	ChgV    float64
 }
 
 type Model struct {
@@ -54,6 +57,7 @@ type Model struct {
 	styles        Styles
 	splashTicks   int
 	walletStatus  string
+	led           *ledger.Ledger
 }
 
 func InitialModel() Model {
@@ -75,6 +79,7 @@ func InitialModel() Model {
 		status:    "Ready - up/down select - Enter quote - p portfolio - ? help - q quit",
 		styles:    NewStyles(),
 		walletStatus: "Connecting to Solana...",
+		led: ledger.Load(),
 	}
 }
 
