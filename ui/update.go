@@ -236,7 +236,7 @@ func (m Model) updateTickers(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.fetchAllPrices()
 	case "?", "h":
 		m.mode = viewHelp
-		return m, nil
+		return m, tea.ClearScreen
 	case "c":
 		m.mode = viewCustomAmount
 		m.customBuf = ""
@@ -478,7 +478,7 @@ func (m Model) updateHelp(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "esc", "?", "h", "enter", " ":
 		m.mode = viewTickers
-		return m, nil
+		return m, tea.ClearScreen
 	}
 	return m, nil
 }

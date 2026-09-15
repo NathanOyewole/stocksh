@@ -253,9 +253,9 @@ func (m Model) viewTickers() string {
 		"  ", symW, "SYMBOL", priceW, "PRICE", chgW, "24H", sparkW, "TREND", sizeW, "SIZE")))
 	b.WriteString("\n\n")
 
-	// Size the visible row window to the panel body height so the hint bar /
-	// custom prompt and footer stay on screen and nothing scrolls the viewport.
-	chrome := 11 // title + rule + col header + blank + blank + hint grid + footer
+	// Size the visible row window to the panel body height so the docked
+	// status line and footer stay on screen and nothing scrolls the viewport.
+	chrome := 6 // title + rule + col header + blank + blank + dock status
 	if m.mode == viewCustomAmount {
 		chrome = 7 // title + rule + col header + blank + blank + prompt + hint
 	}
@@ -341,9 +341,7 @@ func (m Model) viewTickers() string {
 		b.WriteString("  " + m.styles.Header.Render("Custom amount (USDC): $"+m.customBuf+"_"))
 		b.WriteString("\n" + m.styles.Dim.Render("  Enter to confirm   ·   Esc to cancel   ·   backspace to delete"))
 	} else {
-		b.WriteString(m.hintBar())
-		b.WriteString("\n")
-		b.WriteString(m.styles.Dim.Render("  Live prices via Jupiter  ·  auto-refresh every 5s"))
+		b.WriteString(m.styles.Dim.Render("  [?] Help  [q] Quit  │  Live prices via Jupiter · auto-refresh every 5s"))
 	}
 	return b.String()
 }
@@ -799,7 +797,6 @@ func (m Model) viewHelp() string {
 	for _, g := range keyBindings() {
 		b.WriteString(m.helpGroup(g, keyW))
 	}
-	b.WriteString("\n")
 	b.WriteString(m.styles.Dim.Render("  Esc / ? / h    back to tickers"))
 	return m.fit(b.String())
 }
@@ -843,18 +840,21 @@ func keyBindings() []helpGroup {
 }
 
 // helpGroup renders one section as a strict two-column table. The key column
-// is a fixed width shared by every section, so descriptions never wrap back
-// into the key margin or spill past the right edge (desc clip as insurance).
+// is a fixed width shared by every section and descriptions start at the exact
+// same offset, so nothing wraps back into the key margin. A trailing blank row
+// separates logical groups for breathing room.
 func (m Model) helpGroup(g helpGroup, keyW int) string {
 	body := lipgloss.NewStyle().Foreground(lipgloss.Color("#EFEFEF"))
+	descW := max(m.innerWidth()-keyW-6, 8)
 	var b strings.Builder
 	b.WriteString("  " + m.styles.Cyan.Bold(true).Render(g.title))
 	b.WriteString("\n")
 	for _, r := range g.rows {
 		k := m.styles.Green.Bold(true).Render(pad(r.keys, keyW))
-		b.WriteString("  " + k + "  " + body.Render(clip(r.desc, keyW+12)))
+		b.WriteString("  " + k + "  " + body.Render(clip(r.desc, descW)))
 		b.WriteString("\n")
 	}
+	b.WriteString("\n")
 	return b.String()
 }
 
@@ -948,29 +948,4 @@ func tickerCols(inner int) (sym, price, chg, spark, size int) {
 		total--
 	}
 	return sym, price, chg, spark, size
-}
-
-type hintPair struct {
-	keys, desc string
-}
-
-// hintBar renders the key hints as a clean aligned grid instead of a ragged
-// left-aligned list.
-func (m Model) hintBar() string {
-	pairs := []hintPair{
-		{"up/down j/k", "move"}, {"Enter", "quote"}, {"+ / -", "size"},
-		{"s", "buy/sell"}, {"y", "confirm"}, {"Esc", "back"},
-		{"c", "custom size"}, {"0", "home / splash"}, {"*", "track"},
-		{"p / t", "portf / hist"}, {"w", "watchlist"}, {"i", "activity"},
-		{"a", "airdrop"}, {"r", "refresh"}, {"? / h", "help"},
-	}
-	var b strings.Builder
-	for i, p := range pairs {
-		if i > 0 && i%3 == 0 {
-			b.WriteString("\n")
-		}
-		k := m.styles.Green.Bold(true).Render(pad(p.keys, 10))
-		b.WriteString("  " + k + " " + m.styles.Dim.Render(pad(p.desc, 9)))
-	}
-	return b.String()
 }
