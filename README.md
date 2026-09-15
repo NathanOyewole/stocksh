@@ -89,6 +89,23 @@ cp .env.example .env
 # STOCKSH_LIVE=0
 ```
 
+### Go live (mainnet)
+
+The same binary flips to real trading with three env vars — no rebuild:
+
+```bash
+SOLANA_PRIVATE_KEY=<your mainnet keypair>
+SOLANA_RPC=https://api.mainnet-beta.solana.com   # or your own mainnet RPC
+STOCKSH_LIVE=1
+./stocksh serve   # or the TUI
+```
+
+The RPC string decides the network (anything with "devnet" stays paper). To
+protect demos, `stocksh serve` **refuses to start** in live mode unless the
+RPC is mainnet *and* a valid signing wallet is configured — it would rather
+exit than silently paper-trade real funds. The web UI then shows a pulsing
+**LIVE MODE — MAINNET** banner on every screen.
+
 ## Controls
 
 | Key | Action |

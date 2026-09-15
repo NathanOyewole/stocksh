@@ -7,11 +7,13 @@ interface Props {
   prices: SymbolQuote[];
   portfolio: PortfolioResponse | null;
   initialSymbol?: string;
+  live: boolean;
+  network: string;
   onToast: (msg: string, kind?: string) => void;
   onExecuted: () => void;
 }
 
-export function TradePanel({ prices, portfolio, initialSymbol, onToast, onExecuted }: Props) {
+export function TradePanel({ prices, portfolio, initialSymbol, live, network, onToast, onExecuted }: Props) {
   const loaded = useMemo(() => prices.filter((p) => p.loaded), [prices]);
   const [symbol, setSymbol] = useState(initialSymbol && loaded.some((p) => p.symbol === initialSymbol)
       ? initialSymbol
@@ -89,7 +91,9 @@ export function TradePanel({ prices, portfolio, initialSymbol, onToast, onExecut
     <section className="card trade" aria-label="Trade desk">
       <header className="card-head">
         <h2>TRADE DESK</h2>
-        <span className="mid mono muted">paper · devnet</span>
+        <span className={`mid mono ${live ? "live-tag" : "muted"}`}>
+          {live ? "LIVE · MAINNET" : "paper · devnet"}
+        </span>
       </header>
 
       <div className="trade-sym">
@@ -170,8 +174,20 @@ export function TradePanel({ prices, portfolio, initialSymbol, onToast, onExecut
       </button>
 
       <footer className="card-foot mono muted">
-        <span>{preview ? `slippage ${preview.quote.slippageBps / 100}%` : "dry-run — no wallet touched"}</span>
-        <span>{preview ? `impact ${fmtPct(Number(preview.quote.priceImpactPct) * 100, 3)}` : "live jupiter quotes"}</span>
+        <span>
+          {preview
+            ? `slippage ${preview.quote.slippageBps / 100}%`
+            : live
+              ? `live · real ${network.toUpperCase()} swap`
+              : "dry-run — no wallet touched"}
+        </span>
+        <span>
+          {preview
+            ? `impact ${fmtPct(Number(preview.quote.priceImpactPct) * 100, 3)}`
+            : live
+              ? "jupiter · mainnet"
+              : "jupiter · devnet quotes"}
+        </span>
       </footer>
     </section>
   );

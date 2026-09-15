@@ -94,6 +94,18 @@ export function App() {
 
       <TickerTape items={pricesData?.symbols ?? []} />
 
+      {!paper && (
+        <div className="mode-banner live">
+          <i className="live-dot" />
+          LIVE MODE — MAINNET — real Solana funds are being used
+        </div>
+      )}
+      {paper && (
+        <div className="mode-banner paper">
+          PAPER MODE — DEVNET DRY-RUN — no real funds touched
+        </div>
+      )}
+
       <main className="grid">
         <div className="col-left">
           <MarketTable items={pricesData?.symbols ?? []} samples={samples} onTrade={openTrade} />
@@ -108,6 +120,8 @@ export function App() {
               prices={pricesData?.symbols ?? []}
               portfolio={portfolio}
               initialSymbol={tradeTarget}
+              live={!paper}
+              network={net}
               onToast={onToast}
               onExecuted={refresh}
             />

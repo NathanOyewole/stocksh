@@ -114,7 +114,30 @@ func (s *Server) stockPrice(prices map[string]jupiter.PriceInfo, mint string) fl
 	return 0
 }
 
+// guardLiveMode refuses to start in live trading mode unless the deployment
+// is actually wired for it: a mainnet RPC and a real signing wallet. Running
+// "live" against devnet or without a key would silently paper-trade — worse
+// for a demo than refusing to start.
+func (s *Server) guardLiveMode() error {
+	if !s.dryRun && s.network == "devnet" {
+		return fmt.Errorf("live mode requested (STOCKSH_LIVE=1) but SOLANA_RPC resolves to devnet — set SOLANA_RPC to a mainnet endpoint (e.g. https://api.mainnet-beta.solana.com)")
+	}
+	if !s.dryRun {
+		w, err := solana.LoadWallet()
+		if err != nil {
+			return fmt.Errorf("live mode needs a signing wallet: %w", err)
+		}
+		if w == nil {
+			return fmt.Errorf("live mode needs a signing wallet: set SOLANA_PRIVATE_KEY")
+		}
+	}
+	return nil
+}
+
 func (s *Server) Run() error {
+	if err := s.guardLiveMode(); err != nil {
+		return err
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleIndex)
 	mux.HandleFunc("/api/prices", s.handlePrices)
@@ -130,6 +153,13 @@ func (s *Server) Run() error {
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
+	}
+	if !s.dryRun {
+		short := "wallet"
+		if w, err := solana.LoadWallet(); err == nil && w != nil {
+			short = w.PubKey.String()[:4] + "…" + w.PubKey.String()[len(w.PubKey.String())-4:]
+		}
+		log.Printf("LIVE MODE — %s — real Solana funds, real swaps (signing with %s)", s.network, short)
 	}
 	log.Printf("stocksh serve %s — paper=%v — listening on :%s", s.network, s.dryRun, port)
 	return http.ListenAndServe(":"+port, mux)
