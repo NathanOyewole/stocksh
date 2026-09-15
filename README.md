@@ -96,6 +96,49 @@ Star symbols with `*` on the ticker screen, then open the watchlist with
 In live mode (`STOCKSH_LIVE=1`) real on-chain balances are used,
 and P&L is still computed from whatever history the ledger holds.
 
+## Demo walkthrough
+
+A 90-second scripted run that shows off the whole app. Works with the
+default **Devnet + Dry-run** setup — no wallet needed for the paper flow.
+
+```bash
+# 1. Boot (any key to skip the splash once it appears)
+.\stocksh.exe
+
+# 2. Ticker view — prices warm up within 5s, sparklines tick along
+#    + / -        bump order size
+#    s            flip BUY -> SELL (see it toggle in the footer)
+
+# 3. Get a live quote
+#    Enter  on NVDAx -> quote panel: price, 24h change, size, account
+
+# 4. Simulated buy
+#    + + +           size 10
+#    y               confirm -> "trading ready" step (dry-run, dirty paper)
+
+# 5. Portfolio P&L
+#    p               value / avg cost / unrealized P&L / allocation bars
+
+# 6. Trend sparklines
+#    Esc              back to tickers, watch the sparkline crawl every 5s
+
+# 7. Watchlist + price alert (need a funded wallet + devnet for Showboard)
+#    a                airdrop 1 SOL (retries multiple devnet endpoints)
+#    *                star the symbol, w to open watchlist
+#    +                 raise target alert $5 at a time
+
+# 8. Trade history
+#    t                fills from the paper ledger (~/.stocksh/trades.json)
+
+# 9. Out
+#    q                exit
+```
+
+Flip to live — with `STOCKSH_LIVE=1`, a mainnet RPC, and a funded
+keypair — and the same keys run a **real xStocks swap**. The `p`
+portfolio screen always reflects live prices, so a demo can start in
+paper mode and go live by just swapping env vars.
+
 ## Notes
 
 - xStocks liquidity is **mainnet-only**
