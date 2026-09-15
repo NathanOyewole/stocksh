@@ -174,17 +174,33 @@ func (m Model) viewSplash() string {
 }
 
 func (m Model) viewTickers() string {
-	var b strings.Builder
+	inner := m.innerWidth()
+	symW, priceW, chgW, sparkW, sizeW := tickerCols(inner)
+
 	sideLabel := m.styles.Green.Bold(true).Render("BUY")
 	if m.side == "sell" {
 		sideLabel = m.styles.Yellow.Bold(true).Render("SELL")
 	}
-	b.WriteString(m.styles.Header.Render(fmt.Sprintf("TICKERS                                    side: %s", sideLabel)))
-	b.WriteString("\n\n")
-	b.WriteString(m.styles.Dim.Render(fmt.Sprintf("  %-9s  %-12s  %-9s  %-8s  %10s", "SYMBOL", "PRICE", "24h", "TREND", "SIZE")))
+	headRight := m.styles.Dim.Render("side ") + sideLabel +
+		m.styles.Dim.Render("  ·  size ") + m.styles.Cyan.Render(fmt.Sprintf("%.0f USDC", m.amountUSDC))
+
+	var b strings.Builder
+	b.WriteString(spaceBetween(m.styles.Header.Render("TICKERS"), headRight, inner))
 	b.WriteString("\n")
-	b.WriteString(m.styles.Dim.Render("  " + strings.Repeat("-", 58)))
+	b.WriteString(m.styles.Dim.Render("  " + strings.Repeat("─", inner-2)))
+	b.WriteString("\n")
+
+	if len(m.tickers) == 0 {
+		b.WriteString("\n  " + m.styles.Dim.Render("Loading market data..."))
+		b.WriteString("\n")
+		return b.String()
+	}
+
+	// Column header aligned to the same column template as the rows.
+	b.WriteString(m.styles.Dim.Render(fmt.Sprintf("  %s  %-*s  %-*s  %-*s  %-*s  %-*s",
+		"  ", symW, "SYMBOL", priceW, "PRICE", chgW, "24H", sparkW, "TREND", sizeW, "SIZE")))
 	b.WriteString("\n\n")
+
 	for i, t := range m.tickers {
 		price := t.Price
 		if price == "" {
@@ -194,55 +210,51 @@ func (m Model) viewTickers() string {
 		if chg == "" {
 			chg = "-"
 		}
-		sym := fmt.Sprintf("%-9s", t.Symbol)
-		priceCol := fmt.Sprintf("%-12s", price)
-		chgCol := fmt.Sprintf("%-9s", chg)
-		sparkCol := sparkline(t.History, 8)
-		sizeCol := fmt.Sprintf("%10s", fmt.Sprintf("%.0f USDC", m.amountUSDC))
+		size := fmt.Sprintf("%.0f USDC", m.amountUSDC)
+		spk := sparkline(t.History, sparkW)
+
+		raw := "  " +
+			pad(t.Symbol, symW) + "  " +
+			pad(price, priceW) + "  " +
+			pad(chg, chgW) + "  " +
+			pad(spk, sparkW) + "  " +
+			pad(size, sizeW)
 
 		star := "  "
 		if t.Watch {
 			star = m.styles.Yellow.Render("★ ")
 		}
 		if i == m.cursor {
-			line := "  " + sym + "  " + priceCol + "  " + chgCol + "  " + sparkCol + "  " + sizeCol
 			b.WriteString(star)
-			b.WriteString(m.styles.Selected.Render(line))
-		} else {
-			b.WriteString(star)
-			b.WriteString("  ")
-			b.WriteString(sym)
-			b.WriteString("  ")
-			b.WriteString(priceCol)
-			b.WriteString("  ")
-			if strings.HasPrefix(chg, "+") {
-				b.WriteString(m.styles.Green.Render(chgCol))
-			} else if strings.HasPrefix(chg, "-") {
-				b.WriteString(m.styles.Error.Render(chgCol))
-			} else {
-				b.WriteString(m.styles.Dim.Render(chgCol))
-			}
-			b.WriteString("  ")
-			b.WriteString(m.styles.Cyan.Render(sparkCol))
-			b.WriteString("  ")
-			b.WriteString(sizeCol)
+			b.WriteString(m.styles.Selected.Render(raw))
+			b.WriteString("\n")
+			continue
 		}
+
+		b.WriteString(star)
+		b.WriteString("  ")
+		b.WriteString(pad(t.Symbol, symW))
+		b.WriteString("  ")
+		b.WriteString(pad(price, priceW))
+		b.WriteString("  ")
+		if strings.HasPrefix(chg, "+") {
+			b.WriteString(m.styles.Green.Render(pad(chg, chgW)))
+		} else if strings.HasPrefix(chg, "-") {
+			b.WriteString(m.styles.Error.Render(pad(chg, chgW)))
+		} else {
+			b.WriteString(m.styles.Dim.Render(pad(chg, chgW)))
+		}
+		b.WriteString("  ")
+		b.WriteString(m.styles.Cyan.Render(pad(spk, sparkW)))
+		b.WriteString("  ")
+		b.WriteString(pad(size, sizeW))
 		b.WriteString("\n")
 	}
+
 	b.WriteString("\n")
-	b.WriteString(m.styles.Dim.Render("  up/down / j k    navigate          Enter      quote"))
+	b.WriteString(m.hintBar())
 	b.WriteString("\n")
-	b.WriteString(m.styles.Dim.Render("  + / -            size              s          buy/sell"))
-	b.WriteString("\n")
-	b.WriteString(m.styles.Dim.Render("  p/t              portfolio/history  w          watchlist"))
-	b.WriteString("\n")
-	b.WriteString(m.styles.Dim.Render("  *                track symbol      ? / h      help"))
-	b.WriteString("\n")
-	b.WriteString(m.styles.Dim.Render("  r                refresh           q          quit"))
-	b.WriteString("\n\n")
-	b.WriteString(m.styles.Cyan.Render("  Size: ") + m.styles.Green.Bold(true).Render(fmt.Sprintf("%.0f USDC", m.amountUSDC)))
-	b.WriteString("\n")
-	b.WriteString(m.styles.Dim.Render("  Live prices via Jupiter  -  auto-refresh every 5s"))
+	b.WriteString(m.styles.Dim.Render("  Live prices via Jupiter  ·  auto-refresh every 5s"))
 	return b.String()
 }
 
@@ -624,26 +636,40 @@ func (m Model) viewWatchlist() string {
 }
 
 func (m Model) viewHelp() string {
+	const keyW = 16
+	left := m.helpTable("NAVIGATE", []keyDesc{
+		{"up/down · j/k", "move the highlight"},
+		{"Enter / Space", "see a live quote"},
+		{"Esc", "go back / cancel"},
+		{"q", "quit STOCK.sh"},
+	}, keyW)
+	left += m.helpTable("TRADE", []keyDesc{
+		{"+ / -", "order size, in USDC"},
+		{"s", "switch BUY ↔ SELL"},
+		{"y / Enter", "confirm & prepare swap"},
+	}, keyW)
+
+	right := m.helpTable("SCREENS", []keyDesc{
+		{"p", "portfolio & P&L"},
+		{"t", "trade history"},
+		{"w", "watchlist & alerts"},
+		{"*", "track / star a symbol"},
+		{"r", "refresh prices & balances"},
+		{"a", "airdrop SOL (devnet only)"},
+	}, keyW)
+
 	var b strings.Builder
-	b.WriteString(m.styles.Header.Render("HELP  -  KEYBINDINGS"))
+	b.WriteString(lipgloss.PlaceHorizontal(m.innerWidth(), lipgloss.Center,
+		m.styles.Header.Render("HELP")))
+	b.WriteString("\n")
+	b.WriteString(m.styles.Dim.Render("  " + strings.Repeat("─", m.innerWidth()-2)))
+	b.WriteString("\n")
+	b.WriteString(lipgloss.PlaceHorizontal(m.innerWidth(), lipgloss.Center,
+		m.styles.Dim.Render("Every screen works the same way. Here's the whole tour:")))
+	b.WriteString("\n")
+	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, left, "  │  ", right))
 	b.WriteString("\n\n")
-	b.WriteString(m.styles.Cyan.Bold(true).Render("  NAVIGATION") + "\n")
-	b.WriteString("  up/down / j k   Move cursor\n")
-	b.WriteString("  Enter / Space    Get quote\n")
-	b.WriteString("  Esc / n         Cancel / go back\n")
-	b.WriteString("  q               Quit\n\n")
-	b.WriteString(m.styles.Cyan.Bold(true).Render("  TRADING") + "\n")
-	b.WriteString("  + / -           Change USDC size\n")
-	b.WriteString("  s               Toggle BUY / SELL\n")
-	b.WriteString("  y / Enter       Confirm & prepare swap\n\n")
-	b.WriteString(m.styles.Cyan.Bold(true).Render("  SCREENS") + "\n")
-	b.WriteString("  p               Portfolio\n")
-	b.WriteString("  t               Trade history\n")
-	b.WriteString("  w               Watchlist + price alerts\n")
-	b.WriteString("  ? / h           This help\n")
-	b.WriteString("  r               Refresh prices / balances\n")
-	b.WriteString("  a               Airdrop 1 SOL (devnet)\n\n")
-	b.WriteString(m.styles.Dim.Render("  Esc / ? / h     back to tickers"))
+	b.WriteString(m.styles.Dim.Render("  Tip:  ? or h  reopens this guide from anywhere."))
 	return b.String()
 }
 
@@ -677,4 +703,88 @@ func wrap(s string, width int) []string {
 		lines = append(lines, s)
 	}
 	return lines
+}
+
+// pad pads s with trailing spaces so its rendered width is at least w.
+func pad(s string, w int) string {
+	if w <= 0 {
+		return ""
+	}
+	if n := lipgloss.Width(s); n >= w {
+		return s
+	}
+	return s + strings.Repeat(" ", w-lipgloss.Width(s))
+}
+
+// tickerCols returns responsive column widths for the ticker table given the
+// available inner panel width. Wide terminals keep the full table; narrow ones
+// progressively drop sparkline, numeric, and symbol column width so it fits.
+func tickerCols(inner int) (sym, price, chg, spark, size int) {
+	sym, price, chg, spark, size = 9, 12, 9, 8, 10
+	const minSym, minPrice, minChg, minSpark, minSize = 6, 5, 5, 5, 8
+	total := sym + price + chg + spark + size + 12 // star col + 5 gaps
+	if inner >= total {
+		return sym, price, chg, spark, size
+	}
+	for total > inner {
+		switch {
+		case spark > minSpark:
+			spark--
+		case price > minPrice:
+			price--
+		case chg > minChg:
+			chg--
+		case sym > minSym:
+			sym--
+		case size > minSize:
+			size--
+		default:
+			return sym, price, chg, spark, size
+		}
+		total--
+	}
+	return sym, price, chg, spark, size
+}
+
+type hintPair struct {
+	keys, desc string
+}
+
+// hintBar renders the key hints as a clean aligned grid instead of a ragged
+// left-aligned list.
+func (m Model) hintBar() string {
+	pairs := []hintPair{
+		{"up/down j/k", "move"}, {"Enter", "quote"}, {"+ / -", "size"},
+		{"s", "buy/sell"}, {"y", "confirm"}, {"Esc", "back"},
+		{"p / t", "portf / hist"}, {"w", "watchlist"}, {"*", "track"},
+		{"r", "refresh"}, {"? / h", "help"}, {"q", "quit"},
+	}
+	var b strings.Builder
+	for i, p := range pairs {
+		if i > 0 && i%3 == 0 {
+			b.WriteString("\n")
+		}
+		k := m.styles.Green.Bold(true).Render(pad(p.keys, 10))
+		b.WriteString("  " + k + " " + m.styles.Dim.Render(pad(p.desc, 9)))
+	}
+	return b.String()
+}
+
+type keyDesc struct {
+	keys, desc string
+}
+
+// helpTable renders one titled group of key/description rows with the keys
+// column aligned, so the section reads as a neat grid rather than scattered.
+func (m Model) helpTable(title string, rows []keyDesc, keyW int) string {
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString("  " + m.styles.Cyan.Bold(true).Render(strings.ToUpper(title)))
+	b.WriteString("\n")
+	for _, r := range rows {
+		k := m.styles.Green.Bold(true).Render(pad(r.keys, keyW))
+		b.WriteString("  " + k + " " + lipgloss.NewStyle().Foreground(lipgloss.Color("#EFEFEF")).Render(r.desc))
+		b.WriteString("\n")
+	}
+	return b.String()
 }
