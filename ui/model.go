@@ -26,6 +26,7 @@ const (
 	viewHistory
 	viewWatchlist
 	viewHelp
+	viewActivity
 )
 
 type Ticker struct {
@@ -48,7 +49,9 @@ type Model struct {
 	width, height int
 	selected      Ticker
 	amountUSDC    float64
+	orderUSDC     float64 // one-shot custom size for the next order only
 	customBuf     string
+	solPrice      float64 // USD per SOL, for converting USDC costs into the SOL account
 	quote         *jupiter.QuoteResponse
 	status        string
 	lastSig       string
@@ -116,8 +119,9 @@ type swapResultMsg struct {
 	err error
 }
 type balanceMsg struct {
-	sol float64
-	err error
+	sol     float64
+	err     error
+	airdrop bool // true when this balance arrived right after a faucet airdrop
 }
 type tokensMsg struct {
 	balances []solana.TokenBalance
@@ -167,10 +171,12 @@ func (m Model) fetchTokens() tea.Cmd {
 
 func (m Model) fetchAllPrices() tea.Cmd {
 	return func() tea.Msg {
-		mints := make([]string, 0, len(m.tickers))
+		mints := make([]string, 0, len(m.tickers)+1)
 		for _, t := range m.tickers {
 			mints = append(mints, t.Mint)
 		}
+		// SOL rate powers the SOL-account debit/credit on every trade.
+		mints = append(mints, jupiter.SolMint)
 		prices, err := m.jup.GetPrices(mints)
 		return pricesMsg{prices: prices, err: err}
 	}
@@ -178,7 +184,11 @@ func (m Model) fetchAllPrices() tea.Cmd {
 
 func (m Model) fetchQuote() tea.Cmd {
 	return func() tea.Msg {
-		amount := uint64(m.amountUSDC * 1_000_000)
+		amt := m.amountUSDC
+		if m.orderUSDC > 0 {
+			amt = m.orderUSDC
+		}
+		amount := uint64(amt * 1_000_000)
 		var inputMint, outputMint string
 		if m.side == "buy" {
 			inputMint, outputMint = jupiter.USDC, m.selected.Mint

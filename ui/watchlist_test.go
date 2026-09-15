@@ -23,7 +23,7 @@ func TestWatchlistToggleAndAlert(t *testing.T) {
 	m.tickers = []Ticker{
 		{Symbol: "NVDAx", PriceV: 390},
 	}
-	m.led = &ledger.Ledger{}
+	m.led = &ledger.Ledger{Path: t.TempDir() + "/t.json"}
 
 	// * toggles the first ticker as watched
 	updated, _ := m.updateTickers(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'*'}})

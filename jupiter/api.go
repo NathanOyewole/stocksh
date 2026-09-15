@@ -16,6 +16,7 @@ const (
 	BaseURL  = "https://lite-api.jup.ag/swap/v1"
 	PriceURL = "https://lite-api.jup.ag/price/v3"
 	USDC     = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+	SolMint  = "So11111111111111111111111111111111111111112" // wrapped SOL, for SOL/USDC conversion
 )
 
 var Stocks = map[string]string{

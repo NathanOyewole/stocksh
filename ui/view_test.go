@@ -6,6 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"stocksh/ledger"
 )
 
 func TestPadAddsSpace(t *testing.T) {
@@ -155,6 +157,7 @@ func TestCustomAmountEntersAndSets(t *testing.T) {
 	m := InitialModel()
 	m.tickers = []Ticker{{Symbol: "NVDAx", Mint: "mint1", PriceV: 10}}
 	m.amountUSDC = 10
+	m.led = &ledger.Ledger{Path: t.TempDir() + "/t.json"}
 
 	updated, _ := m.updateTickers(keyRune('c'))
 	m2 := updated.(Model)
@@ -175,8 +178,12 @@ func TestCustomAmountEntersAndSets(t *testing.T) {
 	if md.mode != viewTickers {
 		t.Fatal("Enter should return to tickers")
 	}
-	if md.amountUSDC != 525 {
-		t.Fatalf("amount = %v, want 525", md.amountUSDC)
+	if md.orderUSDC != 525 {
+		t.Fatalf("one-shot order = %v, want 525", md.orderUSDC)
+	}
+	// the custom size must NOT leak into the global / displayed size
+	if md.amountUSDC != 10 {
+		t.Fatalf("global size changed to %v, want 10", md.amountUSDC)
 	}
 }
 

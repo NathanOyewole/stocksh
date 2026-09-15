@@ -92,6 +92,8 @@ func (m Model) View() string {
 			body = m.viewHistory()
 		case viewWatchlist:
 			body = m.viewWatchlist()
+		case viewActivity:
+			body = m.viewActivity()
 		case viewHelp:
 			body = m.viewHelp()
 		}
@@ -229,6 +231,10 @@ func (m Model) viewTickers() string {
 	}
 	headRight := m.styles.Dim.Render("side ") + sideLabel +
 		m.styles.Dim.Render("  ·  size ") + m.styles.Cyan.Render(fmt.Sprintf("%.0f USDC", m.amountUSDC))
+	if m.solLoaded {
+		headRight += m.styles.Dim.Render("  ·  SOL ") +
+			m.styles.Green.Bold(true).Render(fmt.Sprintf("%.2f", m.solBalance))
+	}
 
 	var b strings.Builder
 	b.WriteString(spaceBetween(m.styles.Header.Render("TICKERS"), headRight, inner))
@@ -401,6 +407,12 @@ func (m Model) viewPortfolio() string {
 	b.WriteString(m.styles.Header.Render("PORTFOLIO"))
 	b.WriteString("\n\n")
 	if m.wallet == nil {
+		if m.solLoaded {
+			// No wallet: show the persisted paper SOL account (devnet seed).
+			b.WriteString(fmt.Sprintf("  %-11s %s\n",
+				"Paper SOL", m.styles.Green.Bold(true).Render(fmt.Sprintf("%.4f", m.solBalance))))
+			b.WriteString("\n")
+		}
 		if m.dryRun {
 			// Paper trading works wallet-free: positions come from the ledger.
 			b.WriteString(m.styles.Dim.Render("  (no wallet - paper positions only)"))
@@ -412,6 +424,8 @@ func (m Model) viewPortfolio() string {
 		} else {
 			b.WriteString(m.styles.Dim.Render("  No wallet loaded."))
 			b.WriteString("\n\n")
+			b.WriteString(m.renderPositions())
+			b.WriteString("\n")
 			b.WriteString(m.styles.Dim.Render("  Set SOLANA_PRIVATE_KEY in .env"))
 			b.WriteString("\n")
 			b.WriteString(m.styles.Dim.Render("  or place keypair at ~/.config/solana/id.json"))
@@ -425,7 +439,8 @@ func (m Model) viewPortfolio() string {
 		b.WriteString(fmt.Sprintf("  Address     %s\n", m.styles.Cyan.Render(short)))
 		b.WriteString("\n")
 		if m.solLoaded {
-			b.WriteString(fmt.Sprintf("  SOL         %s\n", m.styles.Green.Bold(true).Render(fmt.Sprintf("%.4f", m.solBalance))))
+			b.WriteString(fmt.Sprintf("  %-11s %s\n",
+				"SOL", m.styles.Green.Bold(true).Render(fmt.Sprintf("%.4f", m.solBalance))))
 		} else {
 			b.WriteString("  SOL         loading...\n")
 		}
@@ -433,12 +448,12 @@ func (m Model) viewPortfolio() string {
 		b.WriteString(m.renderPositions())
 		b.WriteString("\n")
 		if m.dryRun {
-			b.WriteString(m.styles.Dim.Render("  Paper portfolio (dry-run) - trades are simulated"))
+			b.WriteString(m.styles.Dim.Render("  Paper swap account - SOL debits/credits are simulated"))
 			b.WriteString("\n")
 		}
 	}
 	b.WriteString("\n\n")
-	b.WriteString(m.styles.Dim.Render("  r     refresh balances"))
+	b.WriteString(m.styles.Dim.Render("  r     refresh balances   ·   i     activity feed"))
 	b.WriteString("\n")
 	b.WriteString(m.styles.Dim.Render("  Esc / p     back to tickers"))
 	return m.fit(b.String())
@@ -715,6 +730,52 @@ func (m Model) viewWatchlist() string {
 	return m.fit(b.String())
 }
 
+func (m Model) viewActivity() string {
+	var b strings.Builder
+	b.WriteString(m.styles.Header.Render("ACTIVITY"))
+	b.WriteString("\n")
+	if m.solLoaded {
+		b.WriteString(m.styles.Dim.Render(fmt.Sprintf("  SOL balance: %.4f   (persisted to disk, survives quit)", m.solBalance)))
+	} else {
+		b.WriteString(m.styles.Dim.Render("  SOL balance: loading..."))
+	}
+	b.WriteString("\n\n")
+
+	acts := m.led.Activities
+	if len(acts) == 0 {
+		b.WriteString(m.styles.Dim.Render("  No activity yet \u2014 trades, airdrops, alerts and sizes show up here."))
+		b.WriteString("\n\n")
+	} else {
+		start := 0
+		if len(acts) > 80 {
+			start = len(acts) - 80
+		}
+		for i := len(acts) - 1; i >= start; i-- {
+			a := acts[i]
+			tag := m.styles.Dim.Render(strings.ToUpper(a.Type))
+			switch a.Type {
+			case "trade":
+				tag = m.styles.Cyan.Bold(true).Render("TRADE")
+			case "airdrop":
+				tag = m.styles.Green.Bold(true).Render("AIRDROP")
+			case "alert":
+				tag = m.styles.Error.Bold(true).Render("ALERT")
+			case "watch":
+				tag = m.styles.Yellow.Bold(true).Render("WATCH")
+			case "size":
+				tag = m.styles.Cyan.Render("SIZE")
+			}
+			b.WriteString(fmt.Sprintf("  %s %s %s\n",
+				m.styles.Dim.Render(a.Time.Format("15:04:05")),
+				tag,
+				clip(a.Text, m.innerWidth()-24)))
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString(m.styles.Dim.Render("  i / Esc  back to tickers   \u00b7   t  trade history"))
+	return m.fit(b.String())
+}
+
 func (m Model) viewHelp() string {
 	inner := m.innerWidth()
 
@@ -773,6 +834,7 @@ func keyBindings() []helpGroup {
 			{"t", "trade history"},
 			{"w", "watchlist & alerts"},
 			{"*", "track / star a symbol"},
+			{"i", "activity feed (trades + events)"},
 			{"0", "back to the splash screen"},
 			{"r", "refresh prices & balances"},
 			{"a", "airdrop SOL (devnet only)"},
@@ -899,8 +961,8 @@ func (m Model) hintBar() string {
 		{"up/down j/k", "move"}, {"Enter", "quote"}, {"+ / -", "size"},
 		{"s", "buy/sell"}, {"y", "confirm"}, {"Esc", "back"},
 		{"c", "custom size"}, {"0", "home / splash"}, {"*", "track"},
-		{"p / t", "portf / hist"}, {"w", "watchlist"}, {"r", "refresh"},
-		{"a", "airdrop"}, {"? / h", "help"}, {"q", "quit"},
+		{"p / t", "portf / hist"}, {"w", "watchlist"}, {"i", "activity"},
+		{"a", "airdrop"}, {"r", "refresh"}, {"? / h", "help"},
 	}
 	var b strings.Builder
 	for i, p := range pairs {

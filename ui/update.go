@@ -51,11 +51,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateWatchlist(msg)
 		case viewHelp:
 			return m.updateHelp(msg)
+		case viewActivity:
+			return m.updateActivity(msg)
 		}
 	case walletLoadedMsg:
 		if msg.err != nil {
 			m.status = "No wallet (set SOLANA_PRIVATE_KEY for live / portfolio)"
 			m.walletStatus = "No wallet found"
+			// Devnet dry-run still needs a SOL account to debit: seed a paper
+			// balance once so buys/sells settle against it.
+			if !m.led.SolSeeded && m.dryRun {
+				if err := m.led.SeedSol(100); err == nil {
+					m.solBalance = 100
+					m.solLoaded = true
+					_ = m.led.RecordActivity("size", "Paper SOL account opened with 100 SOL")
+				}
+			}
 		} else {
 			m.wallet = msg.wallet
 			mode := "DRY-RUN"
@@ -70,11 +81,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case balanceMsg:
 		if msg.err != nil {
 			m.errMsg = msg.err.Error()
-		} else {
-			m.errMsg = ""
-			m.solBalance = msg.sol
-			m.solLoaded = true
+			return m, nil
 		}
+		// The ledger is the source of truth for the displayed SOL balance, so
+		// it only seeds the on-chain number once as a baseline. After that the
+		// app's buys/sells/airdrops adjust it, and it persists across restarts.
+		if msg.airdrop {
+			if m.led.SolSeeded {
+				_ = m.led.AdjSol(1) // faucet delta on top of the persisted baseline
+			} else {
+				_ = m.led.SeedSol(msg.sol) // no baseline yet: the post-airdrop balance becomes it
+			}
+			_ = m.led.RecordActivity("airdrop",
+				fmt.Sprintf("Devnet faucet +1 SOL (balance %.4f)", m.led.SolBalance))
+		} else if !m.led.SolSeeded {
+			_ = m.led.SeedSol(msg.sol)
+		}
+		m.solBalance = m.led.SolBalance
+		m.solLoaded = true
 		return m, nil
 	case tokensMsg:
 		if msg.err == nil {
@@ -124,8 +148,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.lastSig = msg.sig
 		m.errMsg = ""
-		m.status = "READY"
 		m.mode = viewResult
+		m.orderUSDC = 0 // one-shot order consumed
 		m.recordTrade()
 		return m, nil
 	case tickMsg:
@@ -197,10 +221,16 @@ func (m Model) updateTickers(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		sym := m.tickers[m.cursor].Symbol
 		if m.tickers[m.cursor].Watch {
 			m.status = fmt.Sprintf("%s added to watchlist (%s to set alert)", sym, "w")
+			_ = m.led.RecordActivity("watch", fmt.Sprintf("%s added to watchlist", sym))
 		} else {
 			m.status = fmt.Sprintf("%s removed from watchlist", sym)
 			m.tickers[m.cursor].Alert = 0
+			_ = m.led.RecordActivity("watch", fmt.Sprintf("%s removed from watchlist", sym))
 		}
+		return m, nil
+	case "i":
+		m.mode = viewActivity
+		m.status = "Activity feed"
 		return m, nil
 	case "r":
 		return m, m.fetchAllPrices()
@@ -210,7 +240,7 @@ func (m Model) updateTickers(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "c":
 		m.mode = viewCustomAmount
 		m.customBuf = ""
-		m.status = "Custom size \u2014 type digits, Enter to set, Esc to cancel"
+		m.status = "Custom size — type digits, Enter to lock next order, Esc to cancel"
 		return m, nil
 	case "0":
 		m.mode = viewSplash
@@ -241,11 +271,12 @@ func (m Model) updateCustomAmount(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.customBuf = ""
 			return m, nil
 		}
-		m.amountUSDC = val
+		m.orderUSDC = val // one-shot: applies to the next order only
 		m.mode = viewTickers
 		m.customBuf = ""
 		m.errMsg = ""
-		m.status = fmt.Sprintf("Size set to $%.2f USDC", val)
+		_ = m.led.RecordActivity("size", fmt.Sprintf("Order size locked at $%.2f USDC for %s", val, m.selected.Symbol))
+		m.status = fmt.Sprintf("One-shot size $%.2f locked for %s", val, m.selected.Symbol)
 		return m, nil
 	case "backspace":
 		if len(m.customBuf) > 0 {
@@ -344,6 +375,8 @@ func (m *Model) checkAlert(i int) {
 	if above && !t.alertUp {
 		m.errMsg = ""
 		m.status = fmt.Sprintf("ALERT: %s reached $%.2f (target $%.2f)", t.Symbol, t.PriceV, t.Alert)
+		_ = m.led.RecordActivity("alert",
+			fmt.Sprintf("%s hit target $%.2f (current $%.2f)", t.Symbol, t.PriceV, t.Alert))
 	}
 	t.alertUp = above
 }
@@ -450,15 +483,30 @@ func (m Model) updateHelp(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m Model) updateActivity(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "q", "ctrl+c":
+		return m, tea.Quit
+	case "esc", "i", "enter", " ":
+		m.mode = viewTickers
+		return m, nil
+	case "t":
+		m.mode = viewHistory
+		m.status = "Trade history"
+		return m, nil
+	}
+	return m, nil
+}
+
 func (m Model) doAirdrop() tea.Cmd {
 	return func() tea.Msg {
 		_, err := solana.RequestAirdrop(m.wallet.PubKey, 1_000_000_000)
 		if err != nil {
-			return balanceMsg{err: err}
+			return balanceMsg{err: err, airdrop: true}
 		}
 		client := solana.NewRPC("")
 		bal, err := solana.GetBalance(client, m.wallet.PubKey)
-		return balanceMsg{sol: bal, err: err}
+		return balanceMsg{sol: bal, err: err, airdrop: true}
 	}
 }
 
@@ -469,9 +517,10 @@ func truncatePubkey(pk string) string {
 	return pk
 }
 
-// recordTrade writes the last executed swap into the paper/live ledger so
-// the portfolio has a cost basis to compute P&L from. Amounts come from the
-// Jupiter quote (both are 1e6 lamports).
+// recordTrade writes the last executed swap into the paper/live ledger and
+// adjusts the persistent SOL balance so buys/sells settle even after the app
+// is quit and relaunched.  Amounts come from the Jupiter quote (both are 1e6
+// lamports).
 func (m *Model) recordTrade() {
 	if m.quote == nil {
 		return
@@ -495,4 +544,37 @@ func (m *Model) recordTrade() {
 	if err := m.led.Record(m.selected.Symbol, m.side, signedQty, price); err != nil {
 		m.errMsg = fmt.Sprintf("Could not persist trade: %v", err)
 	}
+
+	// Convert the trade into a SOL account debit / credit so the displayed
+	// balance stays correct even after the app is quit and re-launched.
+	var solDelta float64
+	if m.side == "buy" {
+		spend := float64(inAmt) / 1_000_000
+		if m.solPrice > 0 {
+			solDelta = spend / m.solPrice
+		} else {
+			solDelta = spend // fallback when SOL/USDC not loaded yet
+		}
+		_ = m.led.AdjSol(-solDelta)
+	} else {
+		spend := float64(outAmt) / 1_000_000
+		if m.solPrice > 0 {
+			solDelta = spend / m.solPrice
+		} else {
+			solDelta = spend
+		}
+		_ = m.led.AdjSol(solDelta)
+	}
+	m.solBalance = m.led.SolBalance
+	side := "BUY"
+	if m.side == "sell" {
+		side = "SELL"
+	}
+	absQty := signedQty
+	if absQty < 0 {
+		absQty = -absQty
+	}
+	_ = m.led.RecordActivity("trade",
+		fmt.Sprintf("%s %.4f %s @ $%.2f (SOL %.4f)", side, absQty, m.selected.Symbol, price, solDelta))
+	m.status = fmt.Sprintf("%s %.4f %s \u2014 SOL balance %.4f", side, absQty, m.selected.Symbol, m.solBalance)
 }

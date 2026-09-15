@@ -44,6 +44,49 @@ func TestNoTradesNoBasis(t *testing.T) {
 	}
 }
 
+func TestActivityAndBalancePersist(t *testing.T) {
+	path := t.TempDir() + "/trades.json"
+	l := &Ledger{Path: path}
+	if err := l.SeedSol(100); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.AdjSol(-2.5); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.RecordActivity("trade", "BUY 2.5000 NVDAx @ $200.00"); err != nil {
+		t.Fatal(err)
+	}
+	loaded := &Ledger{Path: path}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, loaded); err != nil {
+		t.Fatal(err)
+	}
+	if loaded.SolBalance != 97.5 {
+		t.Fatalf("persisted balance = %v, want 97.5", loaded.SolBalance)
+	}
+	if !loaded.SolSeeded {
+		t.Fatal("SolSeeded should persist")
+	}
+	if len(loaded.Activities) != 1 || loaded.Activities[0].Text == "" {
+		t.Fatal("activities should persist")
+	}
+}
+
+func TestSeedIsIdempotent(t *testing.T) {
+	l := &Ledger{Path: t.TempDir() + "/trades.json"}
+	if err := l.SeedSol(100); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.SeedSol(999); err != nil {
+		t.Fatal(err)
+	}
+	if l.SolBalance != 100 {
+		t.Fatalf("seed overwrote baseline: %v", l.SolBalance)
+	}
+}
 func TestRecordPersists(t *testing.T) {
 	path := t.TempDir() + "/trades.json"
 	l := &Ledger{Path: path}

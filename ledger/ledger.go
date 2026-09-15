@@ -19,6 +19,15 @@ type Trade struct {
 	Time      time.Time `json:"time"`
 }
 
+// Activity is one entry in the app-wide event feed: trades, airdrops, alerts,
+// watchlist changes and custom order sizes, persisted so the history survives
+// quitting and re-launching the app.
+type Activity struct {
+	Time time.Time `json:"time"`
+	Type string    `json:"type"` // trade | airdrop | alert | watch | size
+	Text string    `json:"text"`
+}
+
 // Holding is a computed position for one symbol shown in the portfolio.
 type Holding struct {
 	Symbol      string
@@ -31,9 +40,16 @@ type Holding struct {
 	HasBasis    bool
 }
 
+// Ledger persists trade history plus the app-balance ledger (paper SOL on
+// devnet, seeded from the on-chain wallet balance when one is present). All
+// fields but Path are stored as JSON so positions, cost basis, activities and
+// the SOL account all survive restarts.
 type Ledger struct {
-	Trades []Trade `json:"trades"`
-	Path   string  `json:"-"`
+	Trades     []Trade    `json:"trades"`
+	Activities []Activity `json:"activities,omitempty"`
+	SolBalance float64    `json:"solBalance,omitempty"` // effective (paper/on-chain seed) SOL balance
+	SolSeeded  bool       `json:"solSeeded,omitempty"`  // true once the balance has a baseline
+	Path       string     `json:"-"`
 }
 
 func DefaultPath() (string, error) {
@@ -69,6 +85,37 @@ func (l *Ledger) Record(symbol, side string, signedQty, priceUSDC float64) error
 	l.Trades = append(l.Trades, Trade{
 		Symbol: symbol, Side: side, Qty: signedQty, PriceUSDC: priceUSDC, Time: time.Now(),
 	})
+	return l.save()
+}
+
+// RecordActivity appends an event to the persisted activity feed.
+func (l *Ledger) RecordActivity(kind, text string) error {
+	l.Activities = append(l.Activities, Activity{Time: time.Now(), Type: kind, Text: text})
+	if len(l.Activities) > 500 {
+		l.Activities = l.Activities[len(l.Activities)-500:]
+	}
+	return l.save()
+}
+
+// SeedSol sets the effective SOL balance. It is the app's baseline debit
+// source: it only takes effect once, from the on-chain wallet fetch (or the
+// 100 SOL paper account on devnet when there is no wallet).
+func (l *Ledger) SeedSol(v float64) error {
+	if l.SolSeeded {
+		return nil
+	}
+	l.SolBalance = v
+	l.SolSeeded = true
+	return l.save()
+}
+
+// AdjSol credits (positive) or debits (negative) the effective SOL balance and
+// persists it, keeping the balance true even after the app is quit and re-run.
+func (l *Ledger) AdjSol(delta float64) error {
+	l.SolBalance += delta
+	if l.SolBalance < 0 {
+		l.SolBalance = 0
+	}
 	return l.save()
 }
 
