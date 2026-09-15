@@ -243,11 +243,16 @@ func (m Model) updatePortfolio(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = viewTickers
 		return m, nil
 	case "a":
-		if m.network != "devnet" || m.wallet == nil {
+		if m.wallet == nil {
+			m.errMsg = "no wallet found — set SOLANA_PRIVATE_KEY or place id.json at ~/.config/solana/id.json"
+			return m, nil
+		}
+		if m.network != "devnet" {
+			m.errMsg = "airdrop is devnet-only — use default config or set SOLANA_RPC to an endpoint containing 'devnet'"
 			return m, nil
 		}
 		m.errMsg = ""
-		m.status = "Requesting airdrop..."
+		m.status = "Requesting airdrop (trying fallback endpoints)..."
 		return m, m.doAirdrop()
 	case "r":
 		cmds := []tea.Cmd{m.fetchBalance(), m.fetchAllPrices()}
@@ -389,11 +394,11 @@ func (m Model) updateHelp(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) doAirdrop() tea.Cmd {
 	return func() tea.Msg {
-		client := solana.NewRPC("")
-		_, err := solana.RequestAirdrop(client, m.wallet.PubKey, 1_000_000_000)
+		_, err := solana.RequestAirdrop(m.wallet.PubKey, 1_000_000_000)
 		if err != nil {
 			return balanceMsg{err: err}
 		}
+		client := solana.NewRPC("")
 		bal, err := solana.GetBalance(client, m.wallet.PubKey)
 		return balanceMsg{sol: bal, err: err}
 	}

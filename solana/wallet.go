@@ -66,14 +66,44 @@ func IsDevnet(endpoint string) bool {
 	return strings.Contains(strings.ToLower(endpoint), "devnet")
 }
 
-func RequestAirdrop(client *rpc.Client, pubkey solana.PublicKey, lamports uint64) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	sig, err := client.RequestAirdrop(ctx, pubkey, lamports, rpc.CommitmentConfirmed)
-	if err != nil {
-		return "", fmt.Errorf("airdrop failed: %w", err)
+// airdropRPCs returns the ordered list of devnet RPC endpoints to try for a
+// faucet airdrop, de-duplicated, with any SOLANA_RPC override tried first.
+func airdropRPCs() []string {
+	var eps []string
+	seen := map[string]bool{}
+	add := func(ep string) {
+		ep = strings.TrimSpace(ep)
+		if ep == "" || seen[ep] {
+			return
+		}
+		seen[ep] = true
+		eps = append(eps, ep)
 	}
-	return sig.String(), nil
+	add(os.Getenv("SOLANA_RPC"))
+	add(DevnetRPC)
+	add("https://api.devnet.rpcpool.com")
+	add("https://mango.devnet.rpcpool.com")
+	return eps
+}
+
+// RequestAirdrop asks the devnet faucet to fund pubkey with lamports. It tries
+// several public devnet RPC endpoints in order because airdrops are frequently
+// rate-limited or transiently unavailable on a single endpoint. It returns a
+// clear error (with a rate-limit hint) if every endpoint fails.
+func RequestAirdrop(pubkey solana.PublicKey, lamports uint64) (string, error) {
+	endpoints := airdropRPCs()
+	var errs []string
+	for _, ep := range endpoints {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		sig, err := rpc.New(ep).RequestAirdrop(ctx, pubkey, lamports, rpc.CommitmentConfirmed)
+		cancel()
+		if err == nil {
+			return sig.String(), nil
+		}
+		errs = append(errs, fmt.Sprintf("%s: %v", ep, err))
+	}
+	return "", fmt.Errorf("all airdrop endpoints failed (devnet rate-limits airdrops, wait ~1 min and retry): %s",
+		strings.Join(errs, "; "))
 }
 
 func GetBalance(client *rpc.Client, pubkey solana.PublicKey) (float64, error) {
