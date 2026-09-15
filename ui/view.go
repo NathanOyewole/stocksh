@@ -69,13 +69,17 @@ func (m Model) View() string {
 
 	title := m.styles.Title.Render("STOCK.sh")
 	subtitle := m.styles.Cyan.Render(" Terminal xStocks")
-	badges := lipgloss.JoinHorizontal(lipgloss.Center, netBadge, "  ", modeBadge)
+	badges := lipgloss.JoinHorizontal(lipgloss.Center, netBadge, "   ", modeBadge)
 
 	headerLine := spaceBetween(title+subtitle, badges, innerW)
 	rule := m.styles.Dim.Render(strings.Repeat("─", innerW))
 
+	// Center the screen's content as a block within the panel, instead of
+	// letting it hug the left edge when the panel is wider than the content.
+	centeredBody := lipgloss.PlaceHorizontal(innerW, lipgloss.Center, body)
+
 	panel := m.styles.Border.Width(boxW - 2).Render(
-		lipgloss.JoinVertical(lipgloss.Left, headerLine, rule, "", body),
+		lipgloss.JoinVertical(lipgloss.Left, headerLine, rule, "", centeredBody),
 	)
 
 	status := m.styles.Status.Render(m.status)

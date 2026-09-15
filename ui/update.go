@@ -45,7 +45,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case balanceMsg:
-		if msg.err == nil {
+		if msg.err != nil {
+			m.errMsg = msg.err.Error()
+		} else {
+			m.errMsg = ""
 			m.solBalance = msg.sol
 			m.solLoaded = true
 		}
@@ -190,6 +193,8 @@ func (m Model) updatePortfolio(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.network != "devnet" || m.wallet == nil {
 			return m, nil
 		}
+		m.errMsg = ""
+		m.status = "Requesting airdrop..."
 		return m, m.doAirdrop()
 	case "r":
 		return m, tea.Batch(m.fetchBalance(), m.fetchTokens())
