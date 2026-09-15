@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { Activity, PortfolioResponse, PricesResponse, Trade } from "../types";
 
 const REFRESH_MS = 5000;
+const BACKOFF_MS = 15000;
 const MAX_SAMPLES = 48;
 
 export interface StockFeed {
@@ -24,6 +25,7 @@ export function useStockData(): StockFeed {
   const [samples, setSamples] = useState<Record<string, number[]>>({});
   const [lastUpdated, setLastUpdated] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const down = useRef(false);
 
   const tick = useCallback(async () => {
     const [pr, pf, h, a] = await Promise.allSettled([
@@ -32,6 +34,14 @@ export function useStockData(): StockFeed {
       api.history(),
       api.activity(),
     ]);
+
+    const anyRejected =
+      pr.status === "rejected" ||
+      pf.status === "rejected" ||
+      h.status === "rejected" ||
+      a.status === "rejected";
+    down.current = anyRejected;
+    setError(anyRejected ? "api offline — retrying…" : null);
 
     if (pr.status === "fulfilled") {
       setPrices(pr.value);
@@ -43,7 +53,7 @@ export function useStockData(): StockFeed {
         }
         return next;
       });
-    } else setError(String((pr as PromiseRejectedResult).reason));
+    }
 
     if (pf.status === "fulfilled") setPortfolio(pf.value);
     if (h.status === "fulfilled") setHistory(h.value);
@@ -53,9 +63,18 @@ export function useStockData(): StockFeed {
   }, []);
 
   useEffect(() => {
-    tick();
-    const id = window.setInterval(tick, REFRESH_MS);
-    return () => window.clearInterval(id);
+    let id = 0;
+    let stopped = false;
+    const loop = async () => {
+      await tick();
+      if (stopped) return;
+      id = window.setTimeout(loop, down.current ? BACKOFF_MS : REFRESH_MS);
+    };
+    void loop();
+    return () => {
+      stopped = true;
+      window.clearTimeout(id);
+    };
   }, [tick]);
 
   const refresh = useCallback(() => {

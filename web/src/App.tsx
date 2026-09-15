@@ -87,24 +87,14 @@ export function App() {
             <Clock />
           </span>
           <span className="chip">SOL {pricesData ? fmtUSD(pricesData.sol, 2) : "…"}</span>
-          <span className="chip">{net.toUpperCase()}</span>
-          <span className={`chip ${paper ? "paper" : "live"}`}>{paper ? "PAPER" : "LIVE"}</span>
+          <span className="net-pill mono" title={paper ? "paper demo — no real wallet touched" : "live trading — real Solana funds"}>
+            <i className={`n-dot ${paper ? "d-paper" : "d-live"}`} />
+            {net.toUpperCase()} · {paper ? "PAPER" : "LIVE"}
+          </span>
         </div>
       </header>
 
       <TickerTape items={pricesData?.symbols ?? []} />
-
-      {!paper && (
-        <div className="mode-banner live">
-          <i className="live-dot" />
-          LIVE MODE — MAINNET — real Solana funds are being used
-        </div>
-      )}
-      {paper && (
-        <div className="mode-banner paper">
-          PAPER MODE — DEVNET DRY-RUN — no real funds touched
-        </div>
-      )}
 
       <main className="grid">
         <div className="col-left">
@@ -120,7 +110,6 @@ export function App() {
               prices={pricesData?.symbols ?? []}
               portfolio={portfolio}
               initialSymbol={tradeTarget}
-              live={!paper}
               network={net}
               onToast={onToast}
               onExecuted={refresh}

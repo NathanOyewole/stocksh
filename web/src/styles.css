@@ -88,9 +88,24 @@ body {
   background: var(--panel);
   color: var(--txt);
 }
-.chip.paper { color: var(--accent); border-color: var(--accent-dim); background: var(--accent-dim); }
-.chip.live { color: var(--danger); border-color: rgba(255, 93, 108, 0.3); background: rgba(255, 93, 108, 0.12); }
 .chip-clk .clock { color: var(--muted); }
+
+.net-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  padding: 5px 11px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--muted);
+}
+.n-dot { width: 7px; height: 7px; border-radius: 50%; }
+.n-dot.d-paper { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+.n-dot.d-live { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
 
 .chip-account {
   cursor: pointer;
@@ -124,37 +139,6 @@ body {
 .tape-track { display: inline-flex; white-space: nowrap; animation: marquee 38s linear infinite; }
 .tape:hover .tape-track { animation-play-state: paused; }
 .tape-item { display: inline-flex; align-items: baseline; gap: 8px; padding: 0 26px; font-family: var(--mono); font-size: 12px; }
-
-/* ---------- mode banner ---------- */
-
-.mode-banner {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  padding: 6px 22px;
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 2px;
-  border-bottom: 1px solid var(--line);
-}
-.mode-banner.live {
-  color: #fff;
-  background: linear-gradient(90deg, rgba(255, 93, 108, 0.22), rgba(255, 93, 108, 0.06), rgba(255, 93, 108, 0.22));
-  border-color: rgba(255, 93, 108, 0.4);
-}
-.mode-banner.paper {
-  color: var(--muted);
-  background: linear-gradient(90deg, rgba(56, 194, 255, 0.05), transparent, rgba(56, 194, 255, 0.05));
-}
-.live-dot {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: var(--danger);
-  box-shadow: 0 0 12px var(--danger);
-  animation: pulse 1.1s ease-in-out infinite;
-}
-
-.live-tag { color: var(--danger); letter-spacing: 2px; }
 .tape-sym { color: var(--txt); font-weight: 600; }
 .tape-px { color: var(--txt); }
 .tape-chg { font-size: 11px; }
