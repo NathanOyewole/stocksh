@@ -28,6 +28,45 @@ go build -o stocksh.exe .
 
 Defaults: **Devnet + Dry-run**. Live prices from Jupiter mainnet.
 
+### Web server mode
+
+`stocksh serve` starts an HTTP dashboard + JSON API for the same Jupiter /
+paper-ledger stack, so the platform can be demoed in a browser:
+
+```bash
+.\stocksh.exe serve
+# -> http://localhost:8080  (overridable with PORT)
+```
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/` | GET | Terminal-styled live dashboard (embedded) |
+| `/api/prices` | GET | All 10 tickers: price, 24h, mark, liquidity, network |
+| `/api/portfolio` | GET | Paper SOL + positions with P&L and allocation |
+| `/api/history` | GET | Trade history |
+| `/api/activity` | GET | Activity feed |
+| `/api/quote` | POST | `{symbol, side, usdc}` → Jupiter quote + price |
+| `/api/execute` | POST | `{symbol, side, usdc}` → paper/live swap, ledger updated |
+| `/healthz` | GET | Liveness probe |
+
+Env: `PORT` (Pxxl injects it), `STOCKSH_LIVE=1` for real swaps,
+`STOCKSH_LEDGER` (custom ledger path), `STOCKSH_DEMO=1` (fresh demo ledger).
+The web trading page is paper-mode by default on Devnet.
+
+### Deploy on Pxxl (pxxl.app)
+
+Pxxl detects Go from `go.mod` and runs the binary as a web service. Connect
+the repo in the Pxxl dashboard, then set:
+
+- **Build**: `go build -o stocksh .`
+- **Start**: `./stocksh serve`
+- **Port**: keep the detected `PORT` (the app reads `$PORT`)
+- **Secrets** (optional, for live mode only): `SOLANA_PRIVATE_KEY`,
+  `SOLANA_RPC=https://api.devnet.solana.com`
+
+No secrets are needed for the paper demo — it reads live market prices on
+mainnet and simulates trades on a fresh ledger.
+
 ### Optional .env
 
 ```bash

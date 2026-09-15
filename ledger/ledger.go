@@ -67,6 +67,12 @@ func Load() *Ledger {
 	if err != nil {
 		path = ".stocksh_trades.json"
 	}
+	return LoadPath(path)
+}
+
+// LoadPath reads the ledger from an explicit path (used by the web server for
+// a STOCKSH_LEDGER override). A missing file yields an empty ledger.
+func LoadPath(path string) *Ledger {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return &Ledger{Path: path}

@@ -8,11 +8,18 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"stocksh/server"
 	"stocksh/ui"
 )
 
 func main() {
 	loadDotEnv(".env")
+
+	// `stocksh serve` starts the HTTP dashboard/API instead of the TUI.
+	if len(os.Args) > 1 && os.Args[1] == "serve" {
+		os.Exit(server.Main())
+	}
+
 	m := ui.InitialModel()
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
