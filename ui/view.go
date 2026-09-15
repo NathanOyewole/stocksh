@@ -55,6 +55,8 @@ func (m Model) View() string {
 		body = m.viewResult()
 	case viewPortfolio:
 		body = m.viewPortfolio()
+	case viewHistory:
+		body = m.viewHistory()
 	case viewHelp:
 		body = m.viewHelp()
 	}
@@ -215,7 +217,7 @@ func (m Model) viewTickers() string {
 	b.WriteString("\n")
 	b.WriteString(m.styles.Dim.Render("  + / -            size              s          buy/sell"))
 	b.WriteString("\n")
-	b.WriteString(m.styles.Dim.Render("  p                portfolio         ? / h      help"))
+	b.WriteString(m.styles.Dim.Render("  p/t              portfolio/history  ? / h      help"))
 	b.WriteString("\n")
 	b.WriteString(m.styles.Dim.Render("  r                refresh           q          quit"))
 	b.WriteString("\n\n")
@@ -483,6 +485,49 @@ func (m Model) renderPositions() string {
 	return b.String()
 }
 
+func (m Model) viewHistory() string {
+	var b strings.Builder
+	b.WriteString(m.styles.Header.Render("TRADE HISTORY"))
+	b.WriteString("\n\n")
+
+	trades := m.led.Trades
+	if len(trades) == 0 {
+		b.WriteString(m.styles.Dim.Render("  No trades yet."))
+		b.WriteString("\n")
+		b.WriteString(m.styles.Dim.Render("  Prepare a buy on the ticker screen and watch it appear here."))
+		b.WriteString("\n\n")
+		b.WriteString(m.styles.Dim.Render("  Esc / t     back to tickers"))
+		return b.String()
+	}
+
+	head := fmt.Sprintf("  %-8s %-7s %-4s %-12s %-10s %-10s", "TIME", "SYMBOL", "SIDE", "QTY", "PRICE", "TOTAL")
+	b.WriteString(m.styles.Dim.Render(head))
+	b.WriteString("\n")
+	b.WriteString(m.styles.Dim.Render("  " + strings.Repeat("─", 56)))
+	b.WriteString("\n")
+
+	// newest first
+	for i := len(trades) - 1; i >= 0; i-- {
+		tr := trades[i]
+		side := m.styles.Green.Bold(true).Render("BUY")
+		qty := tr.Qty
+		if tr.Side == "sell" {
+			side = m.styles.Yellow.Bold(true).Render("SELL")
+			qty = -tr.Qty
+		}
+		timeS := tr.Time.Format("15:04:05")
+		row := fmt.Sprintf("  %-8s %-7s %-4s %-12.4f %-10s %-10s",
+			timeS, tr.Symbol, side, qty,
+			fmt.Sprintf("$%.2f", tr.PriceUSDC),
+			fmt.Sprintf("$%.2f", qty*tr.PriceUSDC))
+		b.WriteString(row)
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
+	b.WriteString(m.styles.Dim.Render("  Esc / t     back to tickers"))
+	return b.String()
+}
+
 func (m Model) viewHelp() string {
 	var b strings.Builder
 	b.WriteString(m.styles.Header.Render("HELP  -  KEYBINDINGS"))
@@ -498,6 +543,7 @@ func (m Model) viewHelp() string {
 	b.WriteString("  y / Enter       Confirm & prepare swap\n\n")
 	b.WriteString(m.styles.Cyan.Bold(true).Render("  SCREENS") + "\n")
 	b.WriteString("  p               Portfolio\n")
+	b.WriteString("  t               Trade history\n")
 	b.WriteString("  ? / h           This help\n")
 	b.WriteString("  r               Refresh prices / balances\n")
 	b.WriteString("  a               Airdrop 1 SOL (devnet)\n\n")

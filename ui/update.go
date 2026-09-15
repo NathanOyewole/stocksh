@@ -42,6 +42,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateResult(msg)
 		case viewPortfolio:
 			return m.updatePortfolio(msg)
+		case viewHistory:
+			return m.updateHistory(msg)
 		case viewHelp:
 			return m.updateHelp(msg)
 		}
@@ -176,6 +178,10 @@ func (m Model) updateTickers(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(cmds...)
 		}
 		return m, nil
+	case "t":
+		m.mode = viewHistory
+		m.status = "Trade history"
+		return m, nil
 	case "r":
 		return m, m.fetchAllPrices()
 	case "?", "h":
@@ -232,6 +238,17 @@ func (m Model) updatePortfolio(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.fetchTokens())
 		}
 		return m, tea.Batch(cmds...)
+	}
+	return m, nil
+}
+
+func (m Model) updateHistory(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "q", "ctrl+c":
+		return m, tea.Quit
+	case "esc", "t", "p", "enter", " ":
+		m.mode = viewTickers
+		return m, nil
 	}
 	return m, nil
 }

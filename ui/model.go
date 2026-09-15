@@ -22,6 +22,7 @@ const (
 	viewConfirm
 	viewResult
 	viewPortfolio
+	viewHistory
 	viewHelp
 )
 

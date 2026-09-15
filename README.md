@@ -49,6 +49,7 @@ cp .env.example .env
 | s | Toggle BUY/SELL |
 | y | Confirm / prepare tx |
 | p | Portfolio |
+| t | Trade history |
 | ? / h | Help |
 | r | Refresh |
 | a | Airdrop 1 SOL (Devnet) |
