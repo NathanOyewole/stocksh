@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -36,6 +37,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch m.mode {
 		case viewTickers:
 			return m.updateTickers(msg)
+		case viewCustomAmount:
+			return m.updateCustomAmount(msg)
 		case viewConfirm:
 			return m.updateConfirm(msg)
 		case viewResult:
@@ -204,8 +207,63 @@ func (m Model) updateTickers(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "?", "h":
 		m.mode = viewHelp
 		return m, nil
+	case "c":
+		m.mode = viewCustomAmount
+		m.customBuf = ""
+		m.status = "Custom size \u2014 type digits, Enter to set, Esc to cancel"
+		return m, nil
+	case "0":
+		m.mode = viewSplash
+		m.splashTicks = 0
+		return m, nil
 	}
 	return m, nil
+}
+
+func (m Model) updateCustomAmount(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "q", "ctrl+c":
+		return m, tea.Quit
+	case "esc":
+		m.mode = viewTickers
+		m.customBuf = ""
+		m.errMsg = ""
+		return m, nil
+	case "enter":
+		if m.customBuf == "" {
+			m.mode = viewTickers
+			m.errMsg = ""
+			return m, nil
+		}
+		val, err := strconv.ParseFloat(m.customBuf, 64)
+		if err != nil || val < 0.01 || val > 50000 {
+			m.errMsg = "invalid amount \u2014 use 0.01 to 50000 USDC"
+			m.customBuf = ""
+			return m, nil
+		}
+		m.amountUSDC = val
+		m.mode = viewTickers
+		m.customBuf = ""
+		m.errMsg = ""
+		m.status = fmt.Sprintf("Size set to $%.2f USDC", val)
+		return m, nil
+	case "backspace":
+		if len(m.customBuf) > 0 {
+			m.customBuf = m.customBuf[:len(m.customBuf)-1]
+		}
+		return m, nil
+	default:
+		ch := msg.String()
+		if len(ch) == 1 {
+			c := ch[0]
+			if (c >= '0' && c <= '9') || (c == '.' && !strings.Contains(m.customBuf, ".")) {
+				if len(m.customBuf) < 9 {
+					m.customBuf += ch
+				}
+			}
+		}
+		return m, nil
+	}
 }
 
 func (m Model) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {

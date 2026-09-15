@@ -47,7 +47,7 @@ func (m Model) View() string {
 
 	var body string
 	switch m.mode {
-	case viewTickers:
+	case viewTickers, viewCustomAmount:
 		body = m.viewTickers()
 	case viewConfirm:
 		body = m.viewConfirm()
@@ -252,9 +252,14 @@ func (m Model) viewTickers() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(m.hintBar())
-	b.WriteString("\n")
-	b.WriteString(m.styles.Dim.Render("  Live prices via Jupiter  ·  auto-refresh every 5s"))
+	if m.mode == viewCustomAmount {
+		b.WriteString("  " + m.styles.Header.Render("Custom amount (USDC): $"+m.customBuf+"_"))
+		b.WriteString("\n" + m.styles.Dim.Render("  Enter to confirm   ·   Esc to cancel   ·   backspace to delete"))
+	} else {
+		b.WriteString(m.hintBar())
+		b.WriteString("\n")
+		b.WriteString(m.styles.Dim.Render("  Live prices via Jupiter  ·  auto-refresh every 5s"))
+	}
 	return b.String()
 }
 
@@ -654,6 +659,8 @@ func (m Model) viewHelp() string {
 		{"t", "trade history"},
 		{"w", "watchlist & alerts"},
 		{"*", "track / star a symbol"},
+		{"c", "type a custom USDC size"},
+		{"0", "back to the splash screen"},
 		{"r", "refresh prices & balances"},
 		{"a", "airdrop SOL (devnet only)"},
 	}, keyW)
@@ -756,8 +763,9 @@ func (m Model) hintBar() string {
 	pairs := []hintPair{
 		{"up/down j/k", "move"}, {"Enter", "quote"}, {"+ / -", "size"},
 		{"s", "buy/sell"}, {"y", "confirm"}, {"Esc", "back"},
-		{"p / t", "portf / hist"}, {"w", "watchlist"}, {"*", "track"},
-		{"r", "refresh"}, {"? / h", "help"}, {"q", "quit"},
+		{"c", "custom size"}, {"0", "home / splash"}, {"*", "track"},
+		{"p / t", "portf / hist"}, {"w", "watchlist"}, {"r", "refresh"},
+		{"a", "airdrop"}, {"? / h", "help"}, {"q", "quit"},
 	}
 	var b strings.Builder
 	for i, p := range pairs {

@@ -19,6 +19,7 @@ type viewMode int
 const (
 	viewSplash viewMode = iota
 	viewTickers
+	viewCustomAmount
 	viewConfirm
 	viewResult
 	viewPortfolio
@@ -47,6 +48,7 @@ type Model struct {
 	width, height int
 	selected      Ticker
 	amountUSDC    float64
+	customBuf     string
 	quote         *jupiter.QuoteResponse
 	status        string
 	lastSig       string

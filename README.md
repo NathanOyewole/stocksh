@@ -46,12 +46,14 @@ cp .env.example .env
 | ↑↓ / j k | Navigate |
 | Enter | Get quote |
 | +/- | Change size |
+| c | Type a custom USDC size |
 | s | Toggle BUY/SELL |
 | y | Confirm / prepare tx |
 | p | Portfolio |
 | t | Trade history |
 | w | Watchlist + alerts |
 | * | Star / track symbol |
+| 0 | Back to splash screen |
 | ? / h | Help |
 | r | Refresh |
 | a | Airdrop 1 SOL (Devnet) |
