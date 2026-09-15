@@ -58,3 +58,23 @@ func TestRenderPositionsShowsPnL(t *testing.T) {
 		t.Fatalf("24h line missing: %s", out)
 	}
 }
+
+func TestPortfolioPaperNoWallet(t *testing.T) {
+	m := InitialModel()
+	m.dryRun = true
+	m.wallet = nil
+	m.led = &ledger.Ledger{Path: t.TempDir() + "/t.json"}
+	_ = m.led.Record("NVDAx", "buy", 2, 100)
+	m.tickers = []Ticker{{Symbol: "NVDAx", PriceV: 125, ChgV: 3.2}}
+
+	out := m.viewPortfolio()
+	if !strings.Contains(out, "NVDAx") {
+		t.Fatalf("paper positions should render without a wallet:\n%s", out)
+	}
+	if !strings.Contains(out, "paper positions only") {
+		t.Fatalf("should explain paper-only mode:\n%s", out)
+	}
+	if strings.Contains(out, "No wallet loaded") {
+		t.Fatalf("should not block on wallet in paper mode:\n%s", out)
+	}
+}

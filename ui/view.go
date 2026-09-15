@@ -305,12 +305,22 @@ func (m Model) viewPortfolio() string {
 	b.WriteString(m.styles.Header.Render("PORTFOLIO"))
 	b.WriteString("\n\n")
 	if m.wallet == nil {
-		b.WriteString(m.styles.Dim.Render("  No wallet loaded."))
-		b.WriteString("\n\n")
-		b.WriteString(m.styles.Dim.Render("  Set SOLANA_PRIVATE_KEY in .env"))
-		b.WriteString("\n")
-		b.WriteString(m.styles.Dim.Render("  or place keypair at ~/.config/solana/id.json"))
-		b.WriteString("\n")
+		if m.dryRun {
+			// Paper trading works wallet-free: positions come from the ledger.
+			b.WriteString(m.styles.Dim.Render("  (no wallet - paper positions only)"))
+			b.WriteString("\n\n")
+			b.WriteString(m.renderPositions())
+			b.WriteString("\n")
+			b.WriteString(m.styles.Dim.Render("  Paper portfolio (dry-run) - trades are simulated"))
+			b.WriteString("\n")
+		} else {
+			b.WriteString(m.styles.Dim.Render("  No wallet loaded."))
+			b.WriteString("\n\n")
+			b.WriteString(m.styles.Dim.Render("  Set SOLANA_PRIVATE_KEY in .env"))
+			b.WriteString("\n")
+			b.WriteString(m.styles.Dim.Render("  or place keypair at ~/.config/solana/id.json"))
+			b.WriteString("\n")
+		}
 	} else {
 		short := m.wallet.PubKey.String()
 		if len(short) > 16 {
