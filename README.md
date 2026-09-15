@@ -114,8 +114,8 @@ fly; nothing scrolls or leaves ghost fragments behind).
   - `POS` / `POS VAL` / `P&L` reflect your paper (or live) holdings per symbol
   - columns shrink responsively on narrow terminals; the selected row is
     highlighted full-width
-- **Keybinding footer** — full-width bar inside the frame split into
-  NAVIGATION / TRADE / VIEWS & ACTIONS
+- **Docked hint footer** — minimal bottom bar inside the frame showing
+  `[?] Help · [q] Quit` plus a live-refresh note
 - **Status bar** — a single row pinned below the frame border for status
   text, errors, and size-lock/log messages (never scrolls the terminal)
 

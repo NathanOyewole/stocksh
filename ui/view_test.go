@@ -287,7 +287,8 @@ func TestCustomAmountBackspaceAndEsc(t *testing.T) {
 func TestZeroReturnsToSplash(t *testing.T) {
 	m := InitialModel()
 	m.tickers = []Ticker{{Symbol: "NVDAx", Mint: "mint1", PriceV: 10}}
-	updated, _ := m.updateTickers(keyRune('0'))
+	m.mode = viewTickers
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'0'}})
 	m2 := updated.(Model)
 	if m2.mode != viewSplash {
 		t.Fatal("0 should return to splash")

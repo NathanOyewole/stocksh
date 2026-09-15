@@ -154,6 +154,57 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Global view shortcuts work from every screen: after a trade you can jump
+	// straight to the portfolio (p), history (t), or any other view without
+	// first backing out. When the key would just re-enter the current view it
+	// falls through to the per-view handler, which maps it to "back".
+	switch msg.String() {
+	case "p":
+		if m.mode != viewPortfolio {
+			m.mode = viewPortfolio
+			m.status = "Portfolio"
+			if m.wallet != nil {
+				cmds := []tea.Cmd{m.fetchBalance()}
+				if !m.dryRun {
+					cmds = append(cmds, m.fetchTokens())
+				}
+				return m, tea.Batch(cmds...)
+			}
+			return m, tea.ClearScreen
+		}
+	case "t":
+		if m.mode != viewHistory {
+			m.mode = viewHistory
+			m.status = "Trade history"
+			return m, tea.ClearScreen
+		}
+	case "w":
+		if m.mode != viewWatchlist {
+			m.mode = viewWatchlist
+			m.status = "Watchlist"
+			return m, tea.ClearScreen
+		}
+	case "i":
+		if m.mode != viewActivity {
+			m.mode = viewActivity
+			m.status = "Activity feed"
+			return m, tea.ClearScreen
+		}
+	case "?", "h":
+		if m.mode != viewHelp {
+			m.mode = viewHelp
+			return m, tea.ClearScreen
+		}
+	case "a":
+		return m.triggerAirdrop()
+	case "0":
+		if m.mode != viewSplash {
+			m.mode = viewSplash
+			m.splashTicks = 0
+			return m, tea.ClearScreen
+		}
+	}
+
 	if m.mode == viewSplash {
 		m.mode = viewTickers
 		if m.wallet != nil {
@@ -220,25 +271,6 @@ func (m Model) updateTickers(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			m.side = "buy"
 		}
-	case "p":
-		m.mode = viewPortfolio
-		m.status = "Portfolio"
-		if m.wallet != nil {
-			cmds := []tea.Cmd{m.fetchBalance()}
-			if !m.dryRun {
-				cmds = append(cmds, m.fetchTokens())
-			}
-			return m, tea.Batch(cmds...)
-		}
-		return m, nil
-	case "t":
-		m.mode = viewHistory
-		m.status = "Trade history"
-		return m, nil
-	case "w":
-		m.mode = viewWatchlist
-		m.status = "Watchlist"
-		return m, nil
 	case "*":
 		m.tickers[m.cursor].Watch = !m.tickers[m.cursor].Watch
 		sym := m.tickers[m.cursor].Symbol
@@ -251,25 +283,12 @@ func (m Model) updateTickers(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			_ = m.led.RecordActivity("watch", fmt.Sprintf("%s removed from watchlist", sym))
 		}
 		return m, nil
-	case "i":
-		m.mode = viewActivity
-		m.status = "Activity feed"
-		return m, nil
 	case "r":
 		return m, m.fetchAllPrices()
-	case "?", "h":
-		m.mode = viewHelp
-		return m, tea.ClearScreen
 	case "c":
 		m.mode = viewCustomAmount
 		m.customBuf = ""
 		m.status = "Custom size — type digits, Enter to lock next order, Esc to cancel"
-		return m, nil
-	case "a":
-		return m.triggerAirdrop()
-	case "0":
-		m.mode = viewSplash
-		m.splashTicks = 0
 		return m, nil
 	}
 	return m, nil

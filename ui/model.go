@@ -190,16 +190,63 @@ func (m Model) fetchQuote() tea.Cmd {
 		if m.orderUSDC > 0 {
 			amt = m.orderUSDC
 		}
-		amount := uint64(amt * 1_000_000)
 		var inputMint, outputMint string
+		var amount uint64
 		if m.side == "buy" {
 			inputMint, outputMint = jupiter.USDC, m.selected.Mint
+			amount = uint64(amt * 1_000_000)
 		} else {
+			// A sell order is sized in USDC worth of stock, so convert it to
+			// real token quantity at the current price instead of passing the
+			// USDC figure straight into Jupiter's token input (which would
+			// sell a wildly wrong number of tokens).
 			inputMint, outputMint = m.selected.Mint, jupiter.USDC
+			price := m.quoteMark()
+			if price <= 0 {
+				return quoteMsg{err: fmt.Errorf("no price loaded for %s \u2014 wait for the feed or press r", m.selected.Symbol)}
+			}
+			held := m.holdingOf(m.selected.Symbol)
+			if held <= 0 {
+				return quoteMsg{err: fmt.Errorf("nothing to sell \u2014 you hold 0 %s", m.selected.Symbol)}
+			}
+			switch {
+			case amt < 0.01:
+				return quoteMsg{err: fmt.Errorf("sale too small")}
+			case amt/price > held:
+				amt = held * price // cap to the full holding
+			}
+			amount = uint64(amt/price*1_000_000 + 0.5)
+			if amount == 0 {
+				return quoteMsg{err: fmt.Errorf("sale too small \u2014 min 1 minted token")}
+			}
 		}
 		q, err := m.jup.GetQuote(inputMint, outputMint, amount, 50)
 		return quoteMsg{quote: q, err: err}
 	}
+}
+
+// quoteMark is the price used to value/size orders: the Jupiter USD feed,
+// falling back to the stock-oracle mark (and then to zero).
+func (m Model) quoteMark() float64 {
+	if m.selected.PriceV > 0 {
+		return m.selected.PriceV
+	}
+	return m.selected.Mark
+}
+
+// holdingOf returns the user's actual quantity of a symbol: the persistent
+// paper ledger in dry-run, or the real on-chain token balances in live mode.
+func (m Model) holdingOf(symbol string) float64 {
+	if m.dryRun {
+		return m.led.NetHolding(symbol)
+	}
+	var held float64
+	for _, tb := range m.tokenBalances {
+		if tb.Symbol == symbol {
+			held += tb.Amount
+		}
+	}
+	return held
 }
 
 func (m Model) executeSwap() tea.Cmd {

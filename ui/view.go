@@ -51,7 +51,7 @@ func (m Model) bodyBudget() int {
 	rows -= 4 // top + bottom border rows + padding row above and below
 	rows -= 2 // header row + rule
 	if m.mode == viewTickers || m.mode == viewCustomAmount {
-		rows -= 3 // footer divider + keybinding bar (2 lines)
+		rows -= 2 // footer divider + docked hint line
 	}
 	if rows < 1 {
 		return 1
@@ -243,22 +243,17 @@ func (m Model) statusBar() string {
 	return pad(clip(status, m.width), m.width)
 }
 
-// viewFooter is the full-width keybinding reference grouped across the bottom
-// of the frame into Navigation / Trade / Views & Actions.
+// viewFooter is the minimal docked hint pinned inside the bottom of the frame:
+// the original `[?] Help · [q] Quit` plus the live-refresh note. Full-screen
+// views keep their own on-screen hints; this stays out of the way.
 func (m Model) viewFooter() string {
 	inner := m.innerWidth()
-	nav := m.styles.Cyan.Bold(true).Render("NAVIGATION  ") +
-		m.styles.Dim.Render("j/k · ↑/↓ move    Enter quote   Esc back")
-	trd := m.styles.Cyan.Bold(true).Render("TRADE  ") +
-		m.styles.Dim.Render("s buy/sell  + / - size  c custom size  y confirm")
-	views := m.styles.Cyan.Bold(true).Render("VIEWS & ACTIONS  ") +
-		m.styles.Dim.Render("p/t portfolio·history  w watchlist  * track  r refresh")
-	sys := m.styles.Dim.Render("i activity  a airdrop  ? help  q quit")
-
+	hint := m.styles.Green.Bold(true).Render("[?] Help") +
+		m.styles.Dim.Render("  ") +
+		m.styles.Cyan.Bold(true).Render("[q] Quit") +
+		m.styles.Dim.Render("  │  Live prices via Jupiter · auto-refresh every 5s")
 	rule := m.styles.Dim.Render(strings.Repeat("─", inner))
-	line1 := fitLine(spaceBetween(nav, trd, inner), inner)
-	line2 := fitLine(spaceBetween(views, sys, inner), inner)
-	return strings.Join([]string{rule, line1, line2}, "\n")
+	return strings.Join([]string{rule, fitLine(pad(hint, inner), inner)}, "\n")
 }
 
 // sparkline renders a compact price-trend bar (▁▂▃▄▅▆▇█) from recent history.
@@ -572,7 +567,7 @@ func (m Model) viewResult() string {
 		b.WriteString("  " + m.errMsg)
 	}
 	b.WriteString("\n\n")
-	b.WriteString(m.styles.Dim.Render("  Enter / Esc     back to tickers"))
+	b.WriteString(m.styles.Dim.Render("  p portfolio    Enter / Esc   back to tickers"))
 	return b.String()
 }
 
