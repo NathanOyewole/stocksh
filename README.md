@@ -30,17 +30,28 @@ Defaults: **Devnet + Dry-run**. Live prices from Jupiter mainnet.
 
 ### Web server mode
 
-`stocksh serve` starts an HTTP dashboard + JSON API for the same Jupiter /
-paper-ledger stack, so the platform can be demoed in a browser:
+`stocksh serve` starts a **Vite + React + TypeScript** web dashboard (SPA) plus
+a JSON API for the same Jupiter / paper-ledger stack, so the platform can be
+demoed in a browser:
 
 ```bash
 .\stocksh.exe serve
 # -> http://localhost:8080  (overridable with PORT)
 ```
 
+The frontend lives in `web/` and is compiled with `npm run build` into
+`server/webdist/`, which the Go binary embeds at build time — one binary ships
+the whole app. Dev mode with hot reload:
+
+```bash
+cd web
+npm install
+npm run dev          # Vite on :5173, proxies /api and /healthz to :8080
+```
+
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/` | GET | Terminal-styled live dashboard (embedded) |
+| `/` | GET | Terminal-styled live dashboard (React SPA) |
 | `/api/prices` | GET | All 10 tickers: price, 24h, mark, liquidity, network |
 | `/api/portfolio` | GET | Paper SOL + positions with P&L and allocation |
 | `/api/history` | GET | Trade history |

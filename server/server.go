@@ -1,7 +1,7 @@
 // Package server exposes STOCK.sh as an HTTP service: a live price/portfolio
-// dashboard plus a small JSON API for quoting and executing (paper or live)
-// swaps. It reuses the same Jupiter + ledger logic as the TUI, behind one
-// embed of the built-in landing page.
+// dashboard (Vite + React build embedded from webdist/) plus a small JSON API
+// for quoting and executing (paper or live) swaps. It reuses the same Jupiter
+// + ledger logic as the TUI.
 package server
 
 import (
@@ -22,7 +22,7 @@ import (
 	"stocksh/solana"
 )
 
-//go:embed index.html
+//go:embed all:webdist
 var staticFS embed.FS
 
 // TickerOrder keeps the display order stable across the TUI and the web UI.
@@ -136,12 +136,12 @@ func (s *Server) Run() error {
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
+	if r.URL.Path == "/healthz" || strings.HasPrefix(r.URL.Path, "/api/") {
 		http.NotFound(w, r)
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	content, err := fs.Sub(staticFS, ".")
+	content, err := fs.Sub(staticFS, "webdist")
 	if err != nil {
 		http.Error(w, "template error", http.StatusInternalServerError)
 		return
