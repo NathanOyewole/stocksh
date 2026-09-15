@@ -14,7 +14,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		return m, nil
+	case splashMsg:
+		m.splashTicks += msg.n
+		if m.splashTicks >= 2 {
+			m.mode = viewTickers
+			m.status = "Ready to trade"
+			return m, nil
+		}
+		return m, splashCmd()
 	case tea.KeyMsg:
+		if m.mode == viewSplash {
+			m.mode = viewTickers
+			if m.wallet != nil {
+				m.status = fmt.Sprintf("Wallet %s \u00b7 %s \u00b7 DRY-RUN", truncatePubkey(m.wallet.PubKey.String()), m.network)
+			} else {
+				m.status = "No wallet found - set SOLANA_PRIVATE_KEY for live trading"
+			}
+			return m, nil
+		}
 		switch m.mode {
 		case viewTickers:
 			return m.updateTickers(msg)
@@ -30,17 +47,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case walletLoadedMsg:
 		if msg.err != nil {
 			m.status = "No wallet (set SOLANA_PRIVATE_KEY for live / portfolio)"
+			m.walletStatus = "No wallet found"
 		} else {
 			m.wallet = msg.wallet
-			short := msg.wallet.PubKey.String()
-			if len(short) > 8 {
-				short = short[:4] + "\u2026" + short[len(short)-4:]
-			}
 			mode := "DRY-RUN"
 			if !m.dryRun {
 				mode = "LIVE"
 			}
-			m.status = fmt.Sprintf("Wallet %s \u00b7 %s \u00b7 %s", short, m.network, mode)
+			m.status = fmt.Sprintf("Wallet %s \u00b7 %s \u00b7 %s", truncatePubkey(msg.wallet.PubKey.String()), m.network, mode)
+			m.walletStatus = fmt.Sprintf("Wallet connected \u00b7 %s", mode)
 			return m, m.fetchBalance()
 		}
 		return m, nil
@@ -223,4 +238,11 @@ func (m Model) doAirdrop() tea.Cmd {
 		bal, err := solana.GetBalance(client, m.wallet.PubKey)
 		return balanceMsg{sol: bal, err: err}
 	}
+}
+
+func truncatePubkey(pk string) string {
+	if len(pk) > 12 {
+		return pk[:6] + "\u2026" + pk[len(pk)-4:]
+	}
+	return pk
 }

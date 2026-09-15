@@ -16,7 +16,8 @@ import (
 type viewMode int
 
 const (
-	viewTickers viewMode = iota
+	viewSplash viewMode = iota
+	viewTickers
 	viewConfirm
 	viewResult
 	viewPortfolio
@@ -51,6 +52,8 @@ type Model struct {
 	wallet        *solana.Wallet
 	network       string
 	styles        Styles
+	splashTicks   int
+	walletStatus  string
 }
 
 func InitialModel() Model {
@@ -67,15 +70,22 @@ func InitialModel() Model {
 		net = "mainnet"
 	}
 	return Model{
-		mode: viewTickers, tickers: stocks, cursor: 0, amountUSDC: 10.0,
+		mode: viewSplash, tickers: stocks, cursor: 0, amountUSDC: 10.0,
 		jup: jupiter.NewClient(), dryRun: dry, network: net, side: "buy",
-		status: "Ready - up/down select - Enter quote - p portfolio - ? help - q quit",
-		styles: NewStyles(),
+		status:    "Ready - up/down select - Enter quote - p portfolio - ? help - q quit",
+		styles:    NewStyles(),
+		walletStatus: "Connecting to Solana...",
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(tickCmd(), m.loadWallet(), m.fetchAllPrices())
+	return tea.Batch(tickCmd(), m.loadWallet(), m.fetchAllPrices(), splashCmd())
+}
+
+type splashMsg struct{ n int }
+
+func splashCmd() tea.Cmd {
+	return tea.Tick(time.Second, func(t time.Time) tea.Msg { return splashMsg{1} })
 }
 
 type tickMsg time.Time

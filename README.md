@@ -3,6 +3,11 @@
 Keyboard-only TUI for trading tokenized stocks (xStocks) on Solana.
 Built for **Stocklana** hackathon.
 
+The app boots to a full-screen splash (logo, wallet status, market-data
+feed), then drops you straight into the ticker view — fully wired up in
+the background so prices and balances are already warm by the time you
+start trading.
+
 ## Install
 
 ```bash
@@ -37,6 +42,7 @@ cp .env.example .env
 
 | Key | Action |
 |-----|--------|
+| any-key / Esc | Skip splash screen |
 | ↑↓ / j k | Navigate |
 | Enter | Get quote |
 | +/- | Change size |

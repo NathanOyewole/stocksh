@@ -41,6 +41,10 @@ func (m Model) View() string {
 		return "Loading STOCK.sh..."
 	}
 
+	if m.mode == viewSplash {
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, m.viewSplash())
+	}
+
 	var body string
 	switch m.mode {
 	case viewTickers:
@@ -91,6 +95,32 @@ func (m Model) View() string {
 	stacked := lipgloss.JoinVertical(lipgloss.Center, panel, "", footer)
 
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, stacked)
+}
+
+func (m Model) viewSplash() string {
+	var b strings.Builder
+
+	logo := []string{
+		"████ ████  ██  ████ █  █      ████ █  █",
+		"█     ██  █  █ █    █ █       █    █  █",
+		"████  ██  █  █ █    ██        ████ ████",
+		"   █  ██  █  █ █    █ █          █ █  █",
+		"████  ██   ██  ████ █  █ █    ████ █  █",
+	}
+	for _, line := range logo {
+		b.WriteString(m.styles.Cyan.Render(line))
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
+	b.WriteString("  " + m.styles.Green.Bold(true).Render("Terminal xStocks on Solana.") + "\n")
+	b.WriteString("  " + m.styles.Dim.Render("Trade tokenized stock tokens 24/7 from your terminal.") + "\n")
+	b.WriteString("\n")
+	b.WriteString("  " + m.styles.Yellow.Render("Powered by Jupiter") + m.styles.Dim.Render("   ·   ") + m.styles.Cyan.Render("Built for Stocklana") + "\n")
+	b.WriteString("\n")
+	b.WriteString("  " + m.styles.Dim.Render("◆ ") + m.styles.Normal.Render(m.walletStatus) + "\n")
+	b.WriteString("\n")
+	b.WriteString("  " + m.styles.Dim.Render("[ press any key to continue ]") + "\n")
+	return b.String()
 }
 
 func (m Model) viewTickers() string {
