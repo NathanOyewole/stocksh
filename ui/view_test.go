@@ -109,6 +109,20 @@ func TestViewHelpRenders(t *testing.T) {
 			t.Fatalf("help line overflows panel width (%d > %d):\n%q", lipgloss.Width(line), m.innerWidth(), line)
 		}
 	}
+	// help must also fit the framed viewport exactly at several sizes
+	for _, sz := range [][2]int{{100, 40}, {70, 30}, {120, 44}} {
+		m.width, m.height = sz[0], sz[1]
+		m.mode = viewHelp
+		view := m.View()
+		if n := strings.Count(view, "\n") + 1; n != m.height {
+			t.Fatalf("help %dx%d emitted %d lines, want %d", m.width, m.height, n, m.height)
+		}
+		for i, line := range strings.Split(view, "\n") {
+			if w := lipgloss.Width(strings.TrimRight(line, " ")); w > m.width {
+				t.Fatalf("help %dx%d: line %d is %d cells wide (viewport %d):\n%q", m.width, m.height, i, w, m.width, line)
+			}
+		}
+	}
 }
 
 func TestFitCapsToViewportHeight(t *testing.T) {

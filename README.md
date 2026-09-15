@@ -93,11 +93,31 @@ Star symbols with `*` on the ticker screen, then open the watchlist with
 
 - `+` / `-` set a **target price alert** on the selected symbol (in $5 steps)
 - `x` clears the alert, `*` untracks the symbol
-- when a price crosses its target you'll get an alert in the status bar,
-  even from any other screen | `p` · history `t`
+- when a price crosses its target you'll get an alert in the status bar
+  even from any other screen (portfolio `p` · history `t`)
 
 In live mode (`STOCKSH_LIVE=1`) real on-chain balances are used,
 and P&L is still computed from whatever history the ledger holds.
+
+## UI layout
+
+The whole app runs on one **full-screen responsive frame** that always
+fits the terminal exactly (resize it and every view re-lays-out on the
+fly; nothing scrolls or leaves ghost fragments behind).
+
+- **Header row** — `[ STOCK.sh ] Terminal xStocks` on the left, badges
+  flush to the right edge (`[ DEVNET ]`/`[ MAINNET ]`, `[ DRY-RUN ]`/`[ LIVE ]`)
+- **Ticker table** — 10 columns:
+  `SYMBOL · PRICE · 24H · TREND (sparkline) · LIQ · MARK · POS · POS VAL · P&L · SIZE`
+  - `LIQ` is real USDC liquidity from Jupiter; `MARK` is the stock oracle
+    price (distinct from Jupiter's swap price)
+  - `POS` / `POS VAL` / `P&L` reflect your paper (or live) holdings per symbol
+  - columns shrink responsively on narrow terminals; the selected row is
+    highlighted full-width
+- **Keybinding footer** — full-width bar inside the frame split into
+  NAVIGATION / TRADE / VIEWS & ACTIONS
+- **Status bar** — a single row pinned below the frame border for status
+  text, errors, and size-lock/log messages (never scrolls the terminal)
 
 ## Demo walkthrough
 
