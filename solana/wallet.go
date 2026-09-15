@@ -80,9 +80,9 @@ func airdropRPCs() []string {
 		eps = append(eps, ep)
 	}
 	add(os.Getenv("SOLANA_RPC"))
-	add(DevnetRPC)
-	add("https://api.devnet.rpcpool.com")
 	add("https://mango.devnet.rpcpool.com")
+	add("https://api.devnet.solana.com")
+	add("https://devnet.rpcpool.com")
 	return eps
 }
 
@@ -102,7 +102,7 @@ func RequestAirdrop(pubkey solana.PublicKey, lamports uint64) (string, error) {
 		}
 		errs = append(errs, fmt.Sprintf("%s: %v", ep, err))
 	}
-	return "", fmt.Errorf("all airdrop endpoints failed (devnet rate-limits airdrops, wait ~1 min and retry): %s",
+	return "", fmt.Errorf("all airdrop endpoints failed (the devnet faucet is rate-limited — wait ~1 hr or use https://faucet.solana.com): %s",
 		strings.Join(errs, "; "))
 }
 
