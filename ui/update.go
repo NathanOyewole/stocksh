@@ -198,7 +198,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "a":
 		return m.triggerAirdrop()
 	case "0":
-		if m.mode != viewSplash {
+		// Skip while typing: in custom-size input 0 is a digit, never a
+		// "back to splash" shortcut. updateCustomAmount handles the key.
+		if m.mode != viewSplash && m.mode != viewCustomAmount {
 			m.mode = viewSplash
 			m.splashTicks = 0
 			return m, tea.ClearScreen
@@ -315,13 +317,19 @@ func (m Model) updateCustomAmount(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.customBuf = ""
 			return m, nil
 		}
+		if len(m.tickers) == 0 {
+			m.mode = viewTickers
+			m.customBuf = ""
+			m.errMsg = "no symbols loaded"
+			return m, nil
+		}
 		m.orderUSDC = val // one-shot: applies to the next order only
-		m.mode = viewTickers
+		m.selected = m.tickers[m.cursor]
 		m.customBuf = ""
 		m.errMsg = ""
 		_ = m.led.RecordActivity("size", fmt.Sprintf("Order size locked at $%.2f USDC for %s", val, m.selected.Symbol))
-		m.status = fmt.Sprintf("One-shot size $%.2f locked for %s", val, m.selected.Symbol)
-		return m, nil
+		m.status = fmt.Sprintf("Quoting $%.2f of %s\u2026", val, m.selected.Symbol)
+		return m, m.fetchQuote()
 	case "backspace":
 		if len(m.customBuf) > 0 {
 			m.customBuf = m.customBuf[:len(m.customBuf)-1]

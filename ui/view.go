@@ -510,7 +510,7 @@ func (m Model) viewTickers() string {
 	if m.mode == viewCustomAmount {
 		b.WriteString("\n")
 		b.WriteString("  " + m.styles.Header.Render("Custom amount (USDC): $"+m.customBuf+"_"))
-		b.WriteString("\n" + m.styles.Dim.Render("  Enter to confirm   ·   Esc to cancel   ·   backspace to delete"))
+		b.WriteString("\n" + m.styles.Dim.Render("  Enter to quote   ·   Esc to cancel   ·   backspace to delete"))
 	}
 	// final clamp: the frame needs the body within bodyBudget; if a tiny
 	// viewport somehow exceeds it, truncate rather than push past the border.
@@ -1003,7 +1003,7 @@ func keyBindings() []helpGroup {
 			{"w", "watchlist & alerts"},
 			{"*", "track / star a symbol"},
 			{"i", "activity feed (trades + events)"},
-			{"0", "back to the splash screen"},
+			{"0", "back to splash (a digit in custom $ size)"},
 			{"r", "refresh prices & balances"},
 			{"a", "airdrop SOL (+1 paper / devnet faucet)"},
 		}},

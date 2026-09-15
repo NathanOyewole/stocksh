@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"stocksh/jupiter"
 	"stocksh/ledger"
 )
 
@@ -232,15 +233,25 @@ func TestCustomAmountEntersAndSets(t *testing.T) {
 	}
 	done, _ := cur.updateCustomAmount(tea.KeyMsg{Type: tea.KeyEnter})
 	md := done.(Model)
-	if md.mode != viewTickers {
-		t.Fatal("Enter should return to tickers")
-	}
 	if md.orderUSDC != 525 {
 		t.Fatalf("one-shot order = %v, want 525", md.orderUSDC)
 	}
-	// the custom size must NOT leak into the global / displayed size
+	if md.selected.Symbol != "NVDAx" {
+		t.Fatalf("selected = %q, want NVDAx (custom size must quote the ticker under the cursor)", md.selected.Symbol)
+	}
+	if md.customBuf != "" {
+		t.Fatalf("buffer not cleared after enter: %q", md.customBuf)
+	}
 	if md.amountUSDC != 10 {
 		t.Fatalf("global size changed to %v, want 10", md.amountUSDC)
+	}
+	// feeding the quote drops the user straight into confirm
+	qd, _ := md.Update(quoteMsg{quote: &jupiter.QuoteResponse{
+		InAmount: "525000000", OutAmount: "250000", PriceImpactPct: "0.0",
+	}, err: nil})
+	qm := qd.(Model)
+	if qm.mode != viewConfirm {
+		t.Fatalf("quote should land on confirm, got mode=%v", qm.mode)
 	}
 }
 
@@ -257,6 +268,42 @@ func TestCustomAmountRejectsInvalid(t *testing.T) {
 	md := done.(Model)
 	if md.errMsg == "" {
 		t.Fatalf("amount over 50000 should be rejected, got amount=%v", md.amountUSDC)
+	}
+}
+
+func TestCustomAmountTypesZerosWithoutSplash(t *testing.T) {
+	m := InitialModel()
+	m.tickers = []Ticker{{Symbol: "NVDAx", Mint: "mint1", PriceV: 10}}
+	m.mode = viewTickers
+
+	// enter custom mode via full Update so the global 0 handler is exercised
+	updated, _ := m.Update(keyRune('0'))
+	md := updated.(Model)
+	if md.mode != viewSplash {
+		t.Fatalf("0 on the ticker screen should return to splash (global shortcut), got mode=%v", md.mode)
+	}
+
+	updated, _ = md.Update(keyRune(' ')) // splash -> tickers
+	m = updated.(Model)
+	updated, _ = m.Update(keyRune('c'))
+	m = updated.(Model)
+	if m.mode != viewCustomAmount {
+		t.Fatalf("c should enter custom amount mode, got mode=%v", m.mode)
+	}
+
+	cur := m
+	for _, ch := range "450" {
+		next, _ := cur.Update(keyRune(ch))
+		cur = next.(Model)
+		if cur.mode != viewCustomAmount {
+			t.Fatalf("custom input was interrupted (mode=%v) while typing %q; 0 must stay a digit", cur.mode, ch)
+		}
+	}
+	if cur.customBuf != "450" {
+		t.Fatalf("buffer = %q, want 450", cur.customBuf)
+	}
+	if cur.mode != viewCustomAmount {
+		t.Fatalf("0 during custom input must not go to splash, got mode=%v", cur.mode)
 	}
 }
 
@@ -314,7 +361,7 @@ func TestViewTickersShowsCustomPrompt(t *testing.T) {
 	if !strings.Contains(out, "77.5") {
 		t.Fatalf("typed value missing from prompt: %s", out)
 	}
-	if !strings.Contains(out, "Enter to confirm") {
-		t.Fatalf("confirm hint missing: %s", out)
+	if !strings.Contains(out, "Enter to quote") {
+		t.Fatalf("quote hint missing: %s", out)
 	}
 }

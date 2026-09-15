@@ -54,7 +54,7 @@ cp .env.example .env
 | w | Watchlist + alerts |
 | i | Activity feed (trades, airdrops, alerts) |
 | * | Star / track symbol |
-| 0 | Back to splash screen |
+| 0 | Back to splash screen (a digit in custom-size input) |
 | a | Airdrop SOL — paper +1 without a wallet, real devnet faucet with one |
 | ? / h | Help |
 | r | Refresh |
