@@ -81,6 +81,16 @@ The ticker screen refreshes prices every **5 seconds** and draws a live
 **trend sparkline** per symbol so you can watch momentum build in real
 time.
 
+## Watchlist & price alerts
+
+Star symbols with `*` on the ticker screen, then open the watchlist with
+`w`:
+
+- `+` / `-` set a **target price alert** on the selected symbol (in $5 steps)
+- `x` clears the alert, `*` untracks the symbol
+- when a price crosses its target you'll get an alert in the status bar,
+  even from any other screen | `p` · history `t`
+
 In live mode (`STOCKSH_LIVE=1`) real on-chain balances are used,
 and P&L is still computed from whatever history the ledger holds.
 

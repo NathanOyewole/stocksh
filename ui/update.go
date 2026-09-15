@@ -44,6 +44,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updatePortfolio(msg)
 		case viewHistory:
 			return m.updateHistory(msg)
+		case viewWatchlist:
+			return m.updateWatchlist(msg)
 		case viewHelp:
 			return m.updateHelp(msg)
 		}
@@ -93,6 +95,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if len(m.tickers[i].History) > 42 {
 						m.tickers[i].History = m.tickers[i].History[len(m.tickers[i].History)-42:]
 					}
+					m.checkAlert(i)
 				}
 			}
 		}
@@ -182,6 +185,20 @@ func (m Model) updateTickers(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = viewHistory
 		m.status = "Trade history"
 		return m, nil
+	case "w":
+		m.mode = viewWatchlist
+		m.status = "Watchlist"
+		return m, nil
+	case "*":
+		m.tickers[m.cursor].Watch = !m.tickers[m.cursor].Watch
+		sym := m.tickers[m.cursor].Symbol
+		if m.tickers[m.cursor].Watch {
+			m.status = fmt.Sprintf("%s added to watchlist (%s to set alert)", sym, "w")
+		} else {
+			m.status = fmt.Sprintf("%s removed from watchlist", sym)
+			m.tickers[m.cursor].Alert = 0
+		}
+		return m, nil
 	case "r":
 		return m, m.fetchAllPrices()
 	case "?", "h":
@@ -251,6 +268,112 @@ func (m Model) updateHistory(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, nil
+}
+
+// checkAlert fires a status alert when a watchlisted symbol's price reaches
+// its configured target. Re-arms once the price drops back below the target.
+func (m *Model) checkAlert(i int) {
+	t := &m.tickers[i]
+	if !t.Watch || t.Alert <= 0 {
+		return
+	}
+	above := t.PriceV >= t.Alert
+	if above && !t.alertUp {
+		m.errMsg = ""
+		m.status = fmt.Sprintf("ALERT: %s reached $%.2f (target $%.2f)", t.Symbol, t.PriceV, t.Alert)
+	}
+	t.alertUp = above
+}
+
+func (m Model) updateWatchlist(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "q", "ctrl+c":
+		return m, tea.Quit
+	case "esc", "w", "enter", " ":
+		m.mode = viewTickers
+		return m, nil
+	case "*":
+		// untrack the current watchlist selection
+		if i := m.watchTickerIndex(); i >= 0 {
+			m.tickers[i].Watch = false
+			m.tickers[i].Alert = 0
+			m.status = fmt.Sprintf("%s removed from watchlist", m.tickers[i].Symbol)
+			if m.watchCursor > 0 {
+				m.watchCursor--
+			}
+		}
+		return m, nil
+	case "+", "=", "-", "_":
+		return m, m.adjustAlertTarget(msg.String())
+	case "x":
+		if i := m.watchTickerIndex(); i >= 0 {
+			m.tickers[i].Alert = 0
+			m.tickers[i].alertUp = false
+			m.status = fmt.Sprintf("Alert cleared for %s", m.tickers[i].Symbol)
+		}
+		return m, nil
+	case "up", "k":
+		if m.watchCursor > 0 {
+			m.watchCursor--
+		}
+		return m, nil
+	case "down", "j":
+		if m.watchCursor < m.watchCount()-1 {
+			m.watchCursor++
+		}
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m *Model) watchTickerIndex() int {
+	n := 0
+	for i := range m.tickers {
+		if !m.tickers[i].Watch {
+			continue
+		}
+		if n == m.watchCursor {
+			return i
+		}
+		n++
+	}
+	return -1
+}
+
+func (m *Model) watchCount() int {
+	n := 0
+	for i := range m.tickers {
+		if m.tickers[i].Watch {
+			n++
+		}
+	}
+	return n
+}
+
+// adjustAlertTarget bumps the alert for the current watchlist selection by
+// $5 steps (rounded to whole dollars).
+func (m Model) adjustAlertTarget(key string) tea.Cmd {
+	i := m.watchTickerIndex()
+	if i < 0 {
+		m.status = "Star a symbol with * first"
+		return nil
+	}
+	step := 5.0
+	if key == "-" || key == "_" {
+		step = -5.0
+	}
+	if m.tickers[i].Alert <= 0 {
+		// start near the current price, rounded up to the nearest step
+		m.tickers[i].Alert = float64(int(m.tickers[i].PriceV/step))*step + step
+	} else {
+		m.tickers[i].Alert = float64(int(m.tickers[i].Alert/step))*step + step
+	}
+	if m.tickers[i].Alert < 0 {
+		m.tickers[i].Alert = 0
+	}
+	m.tickers[i].alertUp = m.tickers[i].PriceV >= m.tickers[i].Alert
+	m.status = fmt.Sprintf("%s target: $%.2f", m.tickers[i].Symbol, m.tickers[i].Alert)
+	return nil
 }
 
 func (m Model) updateHelp(msg tea.KeyMsg) (tea.Model, tea.Cmd) {

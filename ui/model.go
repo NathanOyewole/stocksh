@@ -23,6 +23,7 @@ const (
 	viewResult
 	viewPortfolio
 	viewHistory
+	viewWatchlist
 	viewHelp
 )
 
@@ -34,6 +35,9 @@ type Ticker struct {
 	Change  string
 	ChgV    float64
 	History []float64
+	Watch   bool
+	Alert   float64 // 0 = no alert; otherwise target price in USD
+	alertUp bool    // last known relationship of price to target
 }
 
 type Model struct {
@@ -60,6 +64,7 @@ type Model struct {
 	splashTicks   int
 	walletStatus  string
 	led           *ledger.Ledger
+	watchCursor   int
 }
 
 func InitialModel() Model {
@@ -240,8 +245,7 @@ func NewStyles() Styles {
 		Selected: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#000000")).
 			Background(lipgloss.Color("#00FF9F")).
-			Bold(true).
-			Padding(0, 2),
+			Bold(true),
 		Normal: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#F0F0F0")).
 			Padding(0, 2),

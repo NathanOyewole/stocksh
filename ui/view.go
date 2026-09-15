@@ -57,6 +57,8 @@ func (m Model) View() string {
 		body = m.viewPortfolio()
 	case viewHistory:
 		body = m.viewHistory()
+	case viewWatchlist:
+		body = m.viewWatchlist()
 	case viewHelp:
 		body = m.viewHelp()
 	}
@@ -179,7 +181,7 @@ func (m Model) viewTickers() string {
 	}
 	b.WriteString(m.styles.Header.Render(fmt.Sprintf("TICKERS                                    side: %s", sideLabel)))
 	b.WriteString("\n\n")
-	b.WriteString(m.styles.Dim.Render(fmt.Sprintf("  %-10s  %-12s  %-9s  %-7s  %-10s", "SYMBOL", "PRICE", "24h", "TREND", "SIZE")))
+	b.WriteString(m.styles.Dim.Render(fmt.Sprintf("  %-9s  %-12s  %-9s  %-8s  %10s", "SYMBOL", "PRICE", "24h", "TREND", "SIZE")))
 	b.WriteString("\n")
 	b.WriteString(m.styles.Dim.Render("  " + strings.Repeat("-", 58)))
 	b.WriteString("\n\n")
@@ -192,23 +194,38 @@ func (m Model) viewTickers() string {
 		if chg == "" {
 			chg = "-"
 		}
-		spark := sparkline(t.History, 8)
-		row := fmt.Sprintf("  %-10s  %-12s  %-9s  %s  %.0f USDC", t.Symbol, price, chg, spark, m.amountUSDC)
+		sym := fmt.Sprintf("%-9s", t.Symbol)
+		priceCol := fmt.Sprintf("%-12s", price)
+		chgCol := fmt.Sprintf("%-9s", chg)
+		sparkCol := sparkline(t.History, 8)
+		sizeCol := fmt.Sprintf("%10s", fmt.Sprintf("%.0f USDC", m.amountUSDC))
+
+		star := "  "
+		if t.Watch {
+			star = m.styles.Yellow.Render("★ ")
+		}
 		if i == m.cursor {
-			b.WriteString(m.styles.Selected.Render(row))
+			line := "  " + sym + "  " + priceCol + "  " + chgCol + "  " + sparkCol + "  " + sizeCol
+			b.WriteString(star)
+			b.WriteString(m.styles.Selected.Render(line))
 		} else {
-			prefix := fmt.Sprintf("  %-10s  %-12s  ", t.Symbol, price)
-			b.WriteString(m.styles.Normal.Render(prefix))
+			b.WriteString(star)
+			b.WriteString("  ")
+			b.WriteString(sym)
+			b.WriteString("  ")
+			b.WriteString(priceCol)
+			b.WriteString("  ")
 			if strings.HasPrefix(chg, "+") {
-				b.WriteString(m.styles.Green.Render(fmt.Sprintf("%-9s", chg)))
+				b.WriteString(m.styles.Green.Render(chgCol))
 			} else if strings.HasPrefix(chg, "-") {
-				b.WriteString(m.styles.Error.Render(fmt.Sprintf("%-9s", chg)))
+				b.WriteString(m.styles.Error.Render(chgCol))
 			} else {
-				b.WriteString(m.styles.Dim.Render(fmt.Sprintf("%-9s", chg)))
+				b.WriteString(m.styles.Dim.Render(chgCol))
 			}
-			b.WriteString(m.styles.Normal.Render("  "))
-			b.WriteString(m.styles.Cyan.Render(spark))
-			b.WriteString(m.styles.Normal.Render(fmt.Sprintf("  %.0f USDC", m.amountUSDC)))
+			b.WriteString("  ")
+			b.WriteString(m.styles.Cyan.Render(sparkCol))
+			b.WriteString("  ")
+			b.WriteString(sizeCol)
 		}
 		b.WriteString("\n")
 	}
@@ -217,7 +234,9 @@ func (m Model) viewTickers() string {
 	b.WriteString("\n")
 	b.WriteString(m.styles.Dim.Render("  + / -            size              s          buy/sell"))
 	b.WriteString("\n")
-	b.WriteString(m.styles.Dim.Render("  p/t              portfolio/history  ? / h      help"))
+	b.WriteString(m.styles.Dim.Render("  p/t              portfolio/history  w          watchlist"))
+	b.WriteString("\n")
+	b.WriteString(m.styles.Dim.Render("  *                track symbol      ? / h      help"))
 	b.WriteString("\n")
 	b.WriteString(m.styles.Dim.Render("  r                refresh           q          quit"))
 	b.WriteString("\n\n")
@@ -528,6 +547,72 @@ func (m Model) viewHistory() string {
 	return b.String()
 }
 
+func (m Model) viewWatchlist() string {
+	var b strings.Builder
+	b.WriteString(m.styles.Header.Render("WATCHLIST"))
+	b.WriteString("\n\n")
+
+	var watched []int
+	for i := range m.tickers {
+		if m.tickers[i].Watch {
+			watched = append(watched, i)
+		}
+	}
+	if len(watched) == 0 {
+		b.WriteString(m.styles.Dim.Render("  Nothing tracked yet."))
+		b.WriteString("\n")
+		b.WriteString(m.styles.Dim.Render("  On the ticker screen press * to star a symbol."))
+		b.WriteString("\n\n")
+		b.WriteString(m.styles.Dim.Render("  Esc / w     back to tickers"))
+		return b.String()
+	}
+
+	head := fmt.Sprintf("  %-7s %-10s %-8s %-9s %-9s %s", "SYMBOL", "PRICE", "24h", "TREND", "TARGET", "ALERT")
+	b.WriteString(m.styles.Dim.Render(head))
+	b.WriteString("\n")
+	b.WriteString(m.styles.Dim.Render("  " + strings.Repeat("─", 56)))
+	b.WriteString("\n")
+
+	for pos, ti := range watched {
+		t := m.tickers[ti]
+		price := t.Price
+		if price == "" {
+			price = "-"
+		}
+		chg := t.Change
+		if chg == "" {
+			chg = "-"
+		}
+		target := "–"
+		if t.Alert > 0 {
+			target = fmt.Sprintf("$%.2f", t.Alert)
+		}
+		alert := m.styles.Dim.Render("off")
+		if t.Alert > 0 {
+			if t.PriceV >= t.Alert {
+				alert = m.styles.Success.Bold(true).Render("ALERTED")
+			} else {
+				alert = m.styles.Yellow.Render("armed")
+			}
+		}
+
+		star := m.styles.Cyan.Render("★ ")
+		row := fmt.Sprintf("  %s%-6s %-10s %-8s %-9s %-9s ",
+			star, t.Symbol, price, chg, sparkline(t.History, 7), target)
+		if pos == m.watchCursor {
+			b.WriteString(m.styles.Selected.Render(row + alert))
+			b.WriteString("\n")
+		} else {
+			b.WriteString(m.styles.Normal.Render(row))
+			b.WriteString(alert)
+			b.WriteString("\n")
+		}
+	}
+	b.WriteString("\n")
+	b.WriteString(m.styles.Dim.Render("  up/down select   +/- set target   x clear   * untrack   w back"))
+	return b.String()
+}
+
 func (m Model) viewHelp() string {
 	var b strings.Builder
 	b.WriteString(m.styles.Header.Render("HELP  -  KEYBINDINGS"))
@@ -544,6 +629,7 @@ func (m Model) viewHelp() string {
 	b.WriteString(m.styles.Cyan.Bold(true).Render("  SCREENS") + "\n")
 	b.WriteString("  p               Portfolio\n")
 	b.WriteString("  t               Trade history\n")
+	b.WriteString("  w               Watchlist + price alerts\n")
 	b.WriteString("  ? / h           This help\n")
 	b.WriteString("  r               Refresh prices / balances\n")
 	b.WriteString("  a               Airdrop 1 SOL (devnet)\n\n")
