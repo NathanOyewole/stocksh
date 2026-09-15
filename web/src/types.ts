@@ -29,6 +29,10 @@ export interface Position {
 
 export interface PortfolioResponse {
   paper: boolean;
+  network: string;
+  mode: string;
+  address: string;
+  tradeCount: number;
   solBalance: number;
   solPrice: number;
   positions: Position[];

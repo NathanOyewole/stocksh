@@ -227,8 +227,21 @@ func (s *Server) handlePortfolio(w http.ResponseWriter, r *http.Request) {
 			positions[i].AllocPct = positions[i].Value / totalValue * 100
 		}
 	}
+	addr, _ := solana.LoadWallet()
+	address := ""
+	mode := "paper"
+	if addr != nil {
+		address = addr.PubKey.String()
+	}
+	if !s.dryRun {
+		mode = "live"
+	}
 	s.writeJSON(w, http.StatusOK, map[string]any{
 		"paper":      s.dryRun,
+		"network":    s.network,
+		"mode":       mode,
+		"address":    address,
+		"tradeCount": len(s.led.Trades),
 		"solBalance": s.led.SolBalance,
 		"solPrice":   s.solPrice(prices),
 		"positions":  positions,

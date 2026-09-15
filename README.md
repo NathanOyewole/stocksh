@@ -39,14 +39,15 @@ demoed in a browser:
 # -> http://localhost:8080  (overridable with PORT)
 ```
 
-The frontend lives in `web/` and is compiled with `npm run build` into
+The frontend lives in `web/` and is compiled with `pnpm run build` into
 `server/webdist/`, which the Go binary embeds at build time — one binary ships
-the whole app. Dev mode with hot reload:
+the whole app. Dev mode with hot reload (the API spawns alongside Vite):
 
 ```bash
 cd web
-npm install
-npm run dev          # Vite on :5173, proxies /api and /healthz to :8080
+pnpm install
+pnpm run dev:full      # Go API on :8080 + Vite on :5173 (proxies /api to :8080)
+pnpm run dev           # Vite only — needs `pnpm run api` in a second terminal
 ```
 
 | Endpoint | Method | Purpose |

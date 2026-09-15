@@ -92,6 +92,24 @@ body {
 .chip.live { color: var(--danger); border-color: rgba(255, 93, 108, 0.3); background: rgba(255, 93, 108, 0.12); }
 .chip-clk .clock { color: var(--muted); }
 
+.chip-account {
+  cursor: pointer;
+  color: var(--accent);
+  border-color: var(--accent-dim);
+  background: var(--accent-dim);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: transform 0.12s, filter 0.12s;
+}
+.chip-account:hover { transform: translateY(-1px); filter: brightness(1.1); }
+.chip-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+  animation: pulse 1.8s ease-in-out infinite;
+}
+
 /* ---------- ticker tape ---------- */
 
 .tape {
@@ -310,22 +328,50 @@ body {
 .weight-bar { height: 7px; border-radius: 4px; background: linear-gradient(90deg, var(--sol), var(--accent)); opacity: 0.85; }
 .weight-legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 9.5px; }
 .weight-legend span { display: inline-flex; align-items: center; gap: 4px; }
-.chip-sq { width: 7px; height: 7px; border-radius: 2px; display: inline-block; }
-.chip.sol { background: var(--sol); }
-.chip.asset { background: var(--accent); }
-.chip {
-  display: inline-block;
-}
+/* ---------- account ---------- */
 
-.pos-list { display: grid; gap: 2px; }
+.account { border-color: var(--accent-dim); }
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 4px 0 14px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 14px;
+}
+.identity-avatar svg { width: 40px; height: 40px; border-radius: 9px; }
+.identity-meta { display: grid; min-width: 0; }
+.identity-name { font-family: var(--mono); font-weight: 700; font-size: 13px; letter-spacing: 1px; }
+.identity-sub { font-size: 9px; letter-spacing: 1.5px; margin-top: 2px; }
+
+.balances { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+.balance {
+  display: grid;
+  gap: 3px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.balance-label { font-size: 9px; letter-spacing: 1.5px; }
+.balance-value { font-size: 13.5px; font-weight: 700; }
+
+.chip-sq { width: 7px; height: 7px; border-radius: 2px; display: inline-block; }
+.chip.sol, .chip-sq.sol { background: var(--sol); }
+.chip.asset, .chip-sq.asset { background: var(--accent); }
+
 .pos-row { display: flex; justify-content: space-between; gap: 14px; padding: 8px 2px; border-bottom: 1px solid rgba(255, 255, 255, 0.04); }
 .pos-row:hover { background: rgba(255, 255, 255, 0.02); }
-.pos-name { font-family: var(--mono); font-weight: 700; font-size: 13px; display: flex; align-items: baseline; gap: 6px; }
+.pos-name { font-family: var(--mono); font-weight: 700; font-size: 13px; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
 .pos-qty { font-weight: 400; font-size: 11px; }
+.pos-cost { font-weight: 400; font-size: 10px; }
 .pos-bar { margin-top: 5px; height: 3px; background: rgba(255, 255, 255, 0.06); border-radius: 2px; overflow: hidden; }
 .pos-bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--info)); border-radius: 2px; }
 .pos-nums { display: grid; justify-items: end; gap: 2px; }
 .pnl { font-size: 11px; font-weight: 500; }
+.pos-list { display: grid; gap: 2px; }
+
+/* ---------- portfolio (legacy bits) ---------- */
 
 /* ---------- trade desk ---------- */
 

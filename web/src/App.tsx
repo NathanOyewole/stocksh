@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useStockData, updatedAgo } from "./hooks/useStockData";
 import { TickerTape } from "./components/TickerTape";
 import { MarketTable } from "./components/MarketTable";
-import { Portfolio } from "./components/Portfolio";
+import { Account } from "./components/Account";
 import { TradePanel } from "./components/TradePanel";
 import { Feed } from "./components/Feed";
 import { ToastStack, type ToastItem } from "./components/Toasts";
@@ -39,15 +39,24 @@ export function App() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  const scrollTo = useCallback((el: string) => {
+    document.getElementById(el)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
   const openTrade = useCallback((symbol: string) => {
     setTradeTarget(symbol || "");
-    document.getElementById("trade")?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, []);
+    scrollTo("trade");
+  }, [scrollTo]);
 
   const pricesData = prices;
   const net = pricesData?.network ?? "devnet";
   const paper = pricesData?.paper ?? true;
   const statusClass = pricesData?.symbols.some((s) => s.loaded) ? "ok" : "down";
+
+  const equity =
+    portfolio && portfolio.solPrice > 0
+      ? portfolio.totalValue + portfolio.solBalance * portfolio.solPrice
+      : null;
 
   return (
     <div className="app">
@@ -65,6 +74,15 @@ export function App() {
           <span className="brand-sub mono muted">TOKENIZED STOCKS ON SOLANA</span>
         </div>
         <div className="topchips">
+          <button className="chip chip-account" onClick={() => scrollTo("account")} title="My balance & positions">
+            {equity != null ? (
+              <>
+                <i className="chip-dot" /> {fmtUSD(equity, 2)}
+              </>
+            ) : (
+              "…"
+            )}
+          </button>
           <span className="chip-clk">
             <Clock />
           </span>
@@ -82,7 +100,9 @@ export function App() {
           <Feed activity={activity} history={history} />
         </div>
         <div className="col-side">
-          <Portfolio portfolio={portfolio} />
+          <div id="account">
+            <Account portfolio={portfolio} />
+          </div>
           <div id="trade">
             <TradePanel
               prices={pricesData?.symbols ?? []}

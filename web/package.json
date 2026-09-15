@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "api": "go run .. serve",
+    "dev:full": "concurrently --kill-others --names api,web --prefix-colors yellow,cyan \"npm:api\" \"npm:dev\"",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview"
   },
@@ -16,6 +18,7 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
     "typescript": "^5.6.3",
     "vite": "^5.4.11"
   }
