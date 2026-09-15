@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func TestPadAddsSpace(t *testing.T) {
@@ -82,7 +83,7 @@ func TestViewTickersRenders(t *testing.T) {
 func TestViewHelpRenders(t *testing.T) {
 	m := InitialModel()
 	m.width = 86
-	m.height = 30
+	m.height = 40
 	out := m.viewHelp()
 	if !strings.Contains(out, "HELP") {
 		t.Fatal("missing HELP header")
@@ -92,6 +93,47 @@ func TestViewHelpRenders(t *testing.T) {
 	}
 	if !strings.Contains(out, "watchlist") || !strings.Contains(out, "airdrop") || !strings.Contains(out, "portfolio") {
 		t.Fatalf("missing expected screen descriptions: %s", out)
+	}
+	// each action's description must appear exactly once (no duplicated entries)
+	count := func(s string) int { return strings.Count(out, s) }
+	if count("airdrop") != 1 {
+		t.Fatalf("airdrop should be listed exactly once, got %d:\n%s", count("airdrop"), out)
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if lipgloss.Width(line) > m.innerWidth() {
+			t.Fatalf("help line overflows panel width (%d > %d):\n%q", lipgloss.Width(line), m.innerWidth(), line)
+		}
+	}
+}
+
+func TestFitCapsToViewportHeight(t *testing.T) {
+	m := InitialModel()
+	m.height = 12 // panel body budget = 3
+	body := ""
+	for i := 0; i < 10; i++ {
+		body += "line x\n"
+	}
+	got := m.fit(body)
+	if n := strings.Count(got, "\n") + 1; n > m.bodyBudget() {
+		t.Fatalf("fit produced %d lines, budget is %d:\n%s", n, m.bodyBudget(), got)
+	}
+	if !strings.Contains(got, "▾ more") {
+		t.Fatalf("fit should mark the cut:\n%s", got)
+	}
+}
+
+func TestViewNeverExceedsViewportHeight(t *testing.T) {
+	m := InitialModel()
+	m.width = 60
+	m.height = 10
+	m.dryRun = true
+	m.tickers = []Ticker{}
+	for i := 0; i < 30; i++ {
+		m.tickers = append(m.tickers, Ticker{Symbol: "SYM", Price: "$1.00", Change: "+1.0%"})
+	}
+	out := m.View()
+	if n := strings.Count(out, "\n") + 1; n > m.height {
+		t.Fatalf("View emitted %d lines, terminal has %d:\n%s", n, m.height, out)
 	}
 }
 

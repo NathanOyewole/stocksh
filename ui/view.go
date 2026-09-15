@@ -27,6 +27,38 @@ func (m Model) innerWidth() int {
 	return m.boxWidth() - 8
 }
 
+// bodyBudget returns the number of content lines that fit inside the panel
+// body for the current terminal height. Chrome (border, padding, the STOCK.sh
+// header line + rule, and the footer status bar + gap) reserves the rest, so a
+// body whose line count stays within this budget can never overflow the
+// viewport, scroll the terminal, or leave ghosted text behind.
+func (m Model) bodyBudget() int {
+	if m.height <= 0 {
+		return 1 << 20 // unknown viewport (pre-size frame / tests): never truncate
+	}
+	b := m.height - 9
+	if b < 3 {
+		return 3
+	}
+	return b
+}
+
+// fit caps an already-rendered body to the panel body height so no screen can
+// exceed the terminal viewport. Trailing rows are dropped (a hint line marks
+// the cut) rather than letting them leak past the panel border.
+func (m Model) fit(body string) string {
+	budget := m.bodyBudget()
+	if h := strings.Count(body, "\n") + 1; h <= budget {
+		return body
+	}
+	lines := strings.Split(strings.TrimRight(body, "\n"), "\n")
+	out := lines
+	if budget > 1 {
+		out = lines[:budget-1]
+	}
+	return strings.Join(out, "\n") + "\n" + m.styles.Dim.Render("  ▾ more entries — make the window taller")
+}
+
 // spaceBetween justifies left/right within width, padding with spaces.
 func spaceBetween(left, right string, width int) string {
 	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
@@ -41,64 +73,78 @@ func (m Model) View() string {
 		return "Loading STOCK.sh..."
 	}
 
+	var view string
+
 	if m.mode == viewSplash {
-		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, m.viewSplash())
+		view = lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, m.viewSplash())
+	} else {
+		var body string
+		switch m.mode {
+		case viewTickers, viewCustomAmount:
+			body = m.viewTickers()
+		case viewConfirm:
+			body = m.viewConfirm()
+		case viewResult:
+			body = m.viewResult()
+		case viewPortfolio:
+			body = m.viewPortfolio()
+		case viewHistory:
+			body = m.viewHistory()
+		case viewWatchlist:
+			body = m.viewWatchlist()
+		case viewHelp:
+			body = m.viewHelp()
+		}
+
+		netBadge := m.styles.Yellow.Bold(true).Render("[ DEVNET ]")
+		if m.network == "mainnet" {
+			netBadge = m.styles.Green.Bold(true).Render("[ MAINNET ]")
+		}
+		modeBadge := m.styles.Cyan.Bold(true).Render("[ DRY-RUN ]")
+		if !m.dryRun {
+			modeBadge = m.styles.Error.Render("[ LIVE ]")
+		}
+
+		boxW := m.boxWidth()
+		innerW := m.innerWidth()
+
+		title := m.styles.Title.Render("STOCK.sh")
+		subtitle := m.styles.Cyan.Render(" Terminal xStocks")
+		badges := lipgloss.JoinHorizontal(lipgloss.Center, netBadge, "   ", modeBadge)
+
+		headerLine := spaceBetween(title+subtitle, badges, innerW)
+		rule := m.styles.Dim.Render(strings.Repeat("─", innerW))
+
+		// Center the screen's content as a block within the panel, instead of
+		// letting it hug the left edge when the panel is wider than the content.
+		centeredBody := lipgloss.PlaceHorizontal(innerW, lipgloss.Center, body)
+
+		panel := m.styles.Border.Width(boxW - 2).Render(
+			lipgloss.JoinVertical(lipgloss.Left, headerLine, rule, "", centeredBody),
+		)
+
+		status := m.styles.Status.Render(m.status)
+		if m.errMsg != "" {
+			status = m.styles.Error.Render("ERR: " + m.errMsg)
+		}
+		footer := lipgloss.PlaceHorizontal(boxW, lipgloss.Center, status)
+
+		stacked := lipgloss.JoinVertical(lipgloss.Center, panel, "", footer)
+
+		// Place pads every frame to the full width x height, overwriting all
+		// cells, which prevents ghosting from screen-sized differences.
+		view = lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, stacked)
 	}
 
-	var body string
-	switch m.mode {
-	case viewTickers, viewCustomAmount:
-		body = m.viewTickers()
-	case viewConfirm:
-		body = m.viewConfirm()
-	case viewResult:
-		body = m.viewResult()
-	case viewPortfolio:
-		body = m.viewPortfolio()
-	case viewHistory:
-		body = m.viewHistory()
-	case viewWatchlist:
-		body = m.viewWatchlist()
-	case viewHelp:
-		body = m.viewHelp()
+	// Hard guard: never emit more lines than the viewport has, so the terminal
+	// never scrolls and no ghosted fragments survive below the panel.
+	if m.height > 0 {
+		if h := strings.Count(view, "\n") + 1; h > m.height {
+			lines := strings.Split(view, "\n")
+			view = strings.Join(lines[:m.height], "\n")
+		}
 	}
-
-	netBadge := m.styles.Yellow.Bold(true).Render("[ DEVNET ]")
-	if m.network == "mainnet" {
-		netBadge = m.styles.Green.Bold(true).Render("[ MAINNET ]")
-	}
-	modeBadge := m.styles.Cyan.Bold(true).Render("[ DRY-RUN ]")
-	if !m.dryRun {
-		modeBadge = m.styles.Error.Render("[ LIVE ]")
-	}
-
-	boxW := m.boxWidth()
-	innerW := m.innerWidth()
-
-	title := m.styles.Title.Render("STOCK.sh")
-	subtitle := m.styles.Cyan.Render(" Terminal xStocks")
-	badges := lipgloss.JoinHorizontal(lipgloss.Center, netBadge, "   ", modeBadge)
-
-	headerLine := spaceBetween(title+subtitle, badges, innerW)
-	rule := m.styles.Dim.Render(strings.Repeat("─", innerW))
-
-	// Center the screen's content as a block within the panel, instead of
-	// letting it hug the left edge when the panel is wider than the content.
-	centeredBody := lipgloss.PlaceHorizontal(innerW, lipgloss.Center, body)
-
-	panel := m.styles.Border.Width(boxW - 2).Render(
-		lipgloss.JoinVertical(lipgloss.Left, headerLine, rule, "", centeredBody),
-	)
-
-	status := m.styles.Status.Render(m.status)
-	if m.errMsg != "" {
-		status = m.styles.Error.Render("ERR: " + m.errMsg)
-	}
-	footer := lipgloss.PlaceHorizontal(boxW, lipgloss.Center, status)
-
-	stacked := lipgloss.JoinVertical(lipgloss.Center, panel, "", footer)
-
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, stacked)
+	return view
 }
 
 // sparkline renders a compact price-trend bar (▁▂▃▄▅▆▇█) from recent history.
@@ -201,7 +247,35 @@ func (m Model) viewTickers() string {
 		"  ", symW, "SYMBOL", priceW, "PRICE", chgW, "24H", sparkW, "TREND", sizeW, "SIZE")))
 	b.WriteString("\n\n")
 
-	for i, t := range m.tickers {
+	// Size the visible row window to the panel body height so the hint bar /
+	// custom prompt and footer stay on screen and nothing scrolls the viewport.
+	chrome := 11 // title + rule + col header + blank + blank + hint grid + footer
+	if m.mode == viewCustomAmount {
+		chrome = 7 // title + rule + col header + blank + blank + prompt + hint
+	}
+	window := m.bodyBudget() - chrome
+	if window < 1 {
+		window = 1
+	}
+	total := len(m.tickers)
+	if total > window {
+		window-- // reserve a line for the "▾ more" indicator
+		if window < 1 {
+			window = 1
+		}
+	}
+	off := 0
+	if m.cursor >= window {
+		off = m.cursor - window + 1
+	}
+	end := off + window
+	if end > total {
+		end = total
+	}
+	more := total - end
+
+	for i := off; i < end; i++ {
+		t := m.tickers[i]
 		price := t.Price
 		if price == "" {
 			price = "-"
@@ -248,6 +322,11 @@ func (m Model) viewTickers() string {
 		b.WriteString(m.styles.Cyan.Render(pad(spk, sparkW)))
 		b.WriteString("  ")
 		b.WriteString(pad(size, sizeW))
+		b.WriteString("\n")
+	}
+
+	if more > 0 {
+		b.WriteString(m.styles.Dim.Render(fmt.Sprintf("  ▾ %d more symbols below", more)))
 		b.WriteString("\n")
 	}
 
@@ -359,12 +438,10 @@ func (m Model) viewPortfolio() string {
 		}
 	}
 	b.WriteString("\n\n")
-	b.WriteString(m.styles.Dim.Render("  a     airdrop 1 SOL (devnet only)"))
-	b.WriteString("\n")
 	b.WriteString(m.styles.Dim.Render("  r     refresh balances"))
 	b.WriteString("\n")
 	b.WriteString(m.styles.Dim.Render("  Esc / p     back to tickers"))
-	return b.String()
+	return m.fit(b.String())
 }
 
 type position struct {
@@ -434,8 +511,6 @@ func (m Model) renderPositions() string {
 		}
 	}
 
-	b.WriteString(m.styles.Header.Render("  xStocks holdings"))
-	b.WriteString("\n\n")
 	if len(positions) == 0 {
 		b.WriteString(m.styles.Dim.Render("  (empty - buy some on the ticker screen)"))
 		b.WriteString("\n")
@@ -571,7 +646,7 @@ func (m Model) viewHistory() string {
 	}
 	b.WriteString("\n")
 	b.WriteString(m.styles.Dim.Render("  Esc / t     back to tickers"))
-	return b.String()
+	return m.fit(b.String())
 }
 
 func (m Model) viewWatchlist() string {
@@ -637,47 +712,107 @@ func (m Model) viewWatchlist() string {
 	}
 	b.WriteString("\n")
 	b.WriteString(m.styles.Dim.Render("  up/down select   +/- set target   x clear   * untrack   w back"))
-	return b.String()
+	return m.fit(b.String())
 }
 
 func (m Model) viewHelp() string {
-	const keyW = 16
-	left := m.helpTable("NAVIGATE", []keyDesc{
-		{"up/down · j/k", "move the highlight"},
-		{"Enter / Space", "see a live quote"},
-		{"Esc", "go back / cancel"},
-		{"q", "quit STOCK.sh"},
-	}, keyW)
-	left += m.helpTable("TRADE", []keyDesc{
-		{"+ / -", "order size, in USDC"},
-		{"s", "switch BUY ↔ SELL"},
-		{"y / Enter", "confirm & prepare swap"},
-	}, keyW)
+	inner := m.innerWidth()
 
-	right := m.helpTable("SCREENS", []keyDesc{
-		{"p", "portfolio & P&L"},
-		{"t", "trade history"},
-		{"w", "watchlist & alerts"},
-		{"*", "track / star a symbol"},
-		{"c", "type a custom USDC size"},
-		{"0", "back to the splash screen"},
-		{"r", "refresh prices & balances"},
-		{"a", "airdrop SOL (devnet only)"},
-	}, keyW)
+	// key column width: fit the longest key, but never so wide the description
+	// column would spill past the right edge of the panel.
+	keyW := 14
+	for _, g := range keyBindings() {
+		for _, r := range g.rows {
+			if w := lipgloss.Width(r.keys); w > keyW {
+				keyW = w
+			}
+		}
+	}
+	keyW = min(keyW, max(inner-26, 10))
 
 	var b strings.Builder
-	b.WriteString(lipgloss.PlaceHorizontal(m.innerWidth(), lipgloss.Center,
-		m.styles.Header.Render("HELP")))
+	b.WriteString(lipgloss.PlaceHorizontal(inner, lipgloss.Center, m.styles.Header.Render("HELP")))
 	b.WriteString("\n")
-	b.WriteString(m.styles.Dim.Render("  " + strings.Repeat("─", m.innerWidth()-2)))
-	b.WriteString("\n")
-	b.WriteString(lipgloss.PlaceHorizontal(m.innerWidth(), lipgloss.Center,
-		m.styles.Dim.Render("Every screen works the same way. Here's the whole tour:")))
-	b.WriteString("\n")
-	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, left, "  │  ", right))
+	b.WriteString(m.styles.Dim.Render("  " + strings.Repeat("─", inner-2)))
 	b.WriteString("\n\n")
-	b.WriteString(m.styles.Dim.Render("  Tip:  ? or h  reopens this guide from anywhere."))
+	for _, g := range keyBindings() {
+		b.WriteString(m.helpGroup(g, keyW))
+	}
+	b.WriteString("\n")
+	b.WriteString(m.styles.Dim.Render("  Esc / ? / h    back to tickers"))
+	return m.fit(b.String())
+}
+
+type keyDesc struct {
+	keys, desc string
+}
+
+type helpGroup struct {
+	title string
+	rows  []keyDesc
+}
+
+// keyBindings is the single source of truth for what every key does. It feeds
+// the help screen only, so each action is listed exactly once.
+func keyBindings() []helpGroup {
+	return []helpGroup{
+		{"NAVIGATE", []keyDesc{
+			{"up/down · j/k", "move the highlight"},
+			{"Enter / Space", "see a live quote"},
+			{"Esc", "go back / cancel"},
+			{"q", "quit STOCK.sh"},
+		}},
+		{"TRADE", []keyDesc{
+			{"+ / -", "order size, in USDC"},
+			{"c", "type a custom USDC size"},
+			{"s", "switch BUY ↔ SELL"},
+			{"y / Enter", "confirm & prepare swap"},
+		}},
+		{"SCREENS", []keyDesc{
+			{"p", "portfolio & P&L"},
+			{"t", "trade history"},
+			{"w", "watchlist & alerts"},
+			{"*", "track / star a symbol"},
+			{"0", "back to the splash screen"},
+			{"r", "refresh prices & balances"},
+			{"a", "airdrop SOL (devnet only)"},
+		}},
+	}
+}
+
+// helpGroup renders one section as a strict two-column table. The key column
+// is a fixed width shared by every section, so descriptions never wrap back
+// into the key margin or spill past the right edge (desc clip as insurance).
+func (m Model) helpGroup(g helpGroup, keyW int) string {
+	body := lipgloss.NewStyle().Foreground(lipgloss.Color("#EFEFEF"))
+	var b strings.Builder
+	b.WriteString("  " + m.styles.Cyan.Bold(true).Render(g.title))
+	b.WriteString("\n")
+	for _, r := range g.rows {
+		k := m.styles.Green.Bold(true).Render(pad(r.keys, keyW))
+		b.WriteString("  " + k + "  " + body.Render(clip(r.desc, keyW+12)))
+		b.WriteString("\n")
+	}
 	return b.String()
+}
+
+// clip truncates s to at most width cells, appending a narrow ellipsis when it
+// had to cut, so a single row can never exceed the panel width.
+func clip(s string, width int) string {
+	if width < 1 {
+		return ""
+	}
+	if lipgloss.Width(s) <= width {
+		return s
+	}
+	out := ""
+	for _, r := range s {
+		if lipgloss.Width(out)+1 >= width {
+			break
+		}
+		out += string(r)
+	}
+	return out + "…"
 }
 
 func max(a, b int) int {
@@ -774,25 +909,6 @@ func (m Model) hintBar() string {
 		}
 		k := m.styles.Green.Bold(true).Render(pad(p.keys, 10))
 		b.WriteString("  " + k + " " + m.styles.Dim.Render(pad(p.desc, 9)))
-	}
-	return b.String()
-}
-
-type keyDesc struct {
-	keys, desc string
-}
-
-// helpTable renders one titled group of key/description rows with the keys
-// column aligned, so the section reads as a neat grid rather than scattered.
-func (m Model) helpTable(title string, rows []keyDesc, keyW int) string {
-	var b strings.Builder
-	b.WriteString("\n")
-	b.WriteString("  " + m.styles.Cyan.Bold(true).Render(strings.ToUpper(title)))
-	b.WriteString("\n")
-	for _, r := range rows {
-		k := m.styles.Green.Bold(true).Render(pad(r.keys, keyW))
-		b.WriteString("  " + k + " " + lipgloss.NewStyle().Foreground(lipgloss.Color("#EFEFEF")).Render(r.desc))
-		b.WriteString("\n")
 	}
 	return b.String()
 }

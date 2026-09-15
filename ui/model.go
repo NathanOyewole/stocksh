@@ -93,7 +93,7 @@ func InitialModel() Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(tickCmd(), m.loadWallet(), m.fetchAllPrices(), splashCmd())
+	return tea.Batch(tickCmd(), m.loadWallet(), m.fetchAllPrices(), splashCmd(), tea.ClearScreen)
 }
 
 type splashMsg struct{ n int }
