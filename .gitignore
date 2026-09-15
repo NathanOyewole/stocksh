@@ -1,5 +1,6 @@
 stocksh
 stocksh.exe
 *.exe
+*.exe~
 .env
 .DS_Store
