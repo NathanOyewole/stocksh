@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"stocksh/jupiter"
 	"stocksh/solana"
 )
 
@@ -108,6 +109,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case pricesMsg:
 		if msg.err == nil && msg.prices != nil {
+			if p, ok := msg.prices[jupiter.SolMint]; ok {
+				m.solPrice = p.USDPrice
+			}
 			for i, t := range m.tickers {
 				if p, ok := msg.prices[t.Mint]; ok {
 					m.tickers[i].PriceV = p.USDPrice
@@ -242,6 +246,8 @@ func (m Model) updateTickers(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.customBuf = ""
 		m.status = "Custom size — type digits, Enter to lock next order, Esc to cancel"
 		return m, nil
+	case "a":
+		return m.triggerAirdrop()
 	case "0":
 		m.mode = viewSplash
 		m.splashTicks = 0
@@ -332,17 +338,7 @@ func (m Model) updatePortfolio(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = viewTickers
 		return m, nil
 	case "a":
-		if m.wallet == nil {
-			m.errMsg = "no wallet found — set SOLANA_PRIVATE_KEY or place id.json at ~/.config/solana/id.json"
-			return m, nil
-		}
-		if m.network != "devnet" {
-			m.errMsg = "airdrop is devnet-only — use default config or set SOLANA_RPC to an endpoint containing 'devnet'"
-			return m, nil
-		}
-		m.errMsg = ""
-		m.status = "Requesting airdrop (trying fallback endpoints)..."
-		return m, m.doAirdrop()
+		return m.triggerAirdrop()
 	case "r":
 		cmds := []tea.Cmd{m.fetchBalance(), m.fetchAllPrices()}
 		if !m.dryRun {
@@ -496,6 +492,36 @@ func (m Model) updateActivity(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, nil
+}
+
+// triggerAirdrop runs a real devnet faucet airdrop when a wallet is present.
+// With no wallet (paper demo) it instead credits +1 SOL to the persistent
+// ledger so the balance visibly moves without a keypair on the machine.
+func (m Model) triggerAirdrop() (tea.Model, tea.Cmd) {
+	if m.wallet == nil {
+		if m.network != "devnet" && !m.dryRun {
+			m.errMsg = "no wallet found — set SOLANA_PRIVATE_KEY or place id.json at ~/.config/solana/id.json"
+			return m, nil
+		}
+		if m.led.SolSeeded {
+			_ = m.led.AdjSol(1)
+		} else {
+			_ = m.led.SeedSol(1)
+		}
+		m.solBalance = m.led.SolBalance
+		m.solLoaded = true
+		_ = m.led.RecordActivity("airdrop",
+			fmt.Sprintf("Paper airdrop +1 SOL (balance %.4f)", m.led.SolBalance))
+		m.status = "Airdrop +1 SOL (paper)"
+		return m, nil
+	}
+	if m.network != "devnet" {
+		m.errMsg = "airdrop is devnet-only — use default config or set SOLANA_RPC to an endpoint containing 'devnet'"
+		return m, nil
+	}
+	m.errMsg = ""
+	m.status = "Requesting airdrop (trying fallback endpoints)..."
+	return m, m.doAirdrop()
 }
 
 func (m Model) doAirdrop() tea.Cmd {

@@ -52,11 +52,12 @@ cp .env.example .env
 | p | Portfolio |
 | t | Trade history |
 | w | Watchlist + alerts |
+| i | Activity feed (trades, airdrops, alerts) |
 | * | Star / track symbol |
 | 0 | Back to splash screen |
+| a | Airdrop SOL — paper +1 without a wallet, real devnet faucet with one |
 | ? / h | Help |
 | r | Refresh |
-| a | Airdrop 1 SOL (Devnet) |
 | Esc | Back |
 | q | Quit |
 
@@ -109,14 +110,15 @@ default **Devnet + Dry-run** setup — no wallet needed for the paper flow.
 
 # 2. Ticker view — prices warm up within 5s, sparklines tick along
 #    + / -        bump order size
-#    s            flip BUY -> SELL (see it toggle in the footer)
+#    s            flip BUY -> SELL (see it toggle in the header)
+#    c            type a one-shot custom USDC size (reverts after the trade)
 
 # 3. Get a live quote
 #    Enter  on NVDAx -> quote panel: price, 24h change, size, account
 
-# 4. Simulated buy
-#    + + +           size 10
-#    y               confirm -> "trading ready" step (dry-run, dirty paper)
+# 4. Simulated buy (no wallet needed — paper SOL account is seeded)
+#    y               confirm -> "DRY-RUN OK - tx prepared" and a paper
+#                   position is recorded against the paper SOL balance
 
 # 5. Portfolio P&L
 #    p               value / avg cost / unrealized P&L / allocation bars
@@ -124,13 +126,14 @@ default **Devnet + Dry-run** setup — no wallet needed for the paper flow.
 # 6. Trend sparklines
 #    Esc              back to tickers, watch the sparkline crawl every 5s
 
-# 7. Watchlist + price alert (need a funded wallet + devnet for Showboard)
-#    a                airdrop 1 SOL (retries multiple devnet endpoints)
+# 7. Watchlist + price alert
+#    a                airdrop +1 SOL (paper without a wallet; real devnet faucet with one)
 #    *                star the symbol, w to open watchlist
 #    +                 raise target alert $5 at a time
 
-# 8. Trade history
+# 8. Trade history + activity feed
 #    t                fills from the paper ledger (~/.stocksh/trades.json)
+#    i                activity feed: trades, airdrops, alerts, size locks
 
 # 9. Out
 #    q                exit

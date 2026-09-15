@@ -17,6 +17,16 @@ type Wallet struct {
 	PubKey  solana.PublicKey
 }
 
+// NewPaperPublicKey returns a fresh random pubkey. Used only for preparing
+// serialized swap transactions in paper (dry-run) mode; never signed or sent.
+func NewPaperPublicKey() (string, error) {
+	kp, err := solana.NewRandomPrivateKey()
+	if err != nil {
+		return "", err
+	}
+	return kp.PublicKey().String(), nil
+}
+
 func LoadWallet() (*Wallet, error) {
 	if pk := os.Getenv("SOLANA_PRIVATE_KEY"); pk != "" {
 		keypair, err := solana.PrivateKeyFromBase58(pk)

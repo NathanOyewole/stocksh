@@ -205,10 +205,21 @@ func (m Model) executeSwap() tea.Cmd {
 		if m.quote == nil {
 			return swapResultMsg{err: fmt.Errorf("missing quote")}
 		}
-		if m.wallet == nil {
+		var pubkey string
+		if m.wallet != nil {
+			pubkey = m.wallet.PubKey.String()
+		} else if m.dryRun || m.network == "devnet" {
+			// Paper trading: a throwaway keypair lets Jupiter prepare the
+			// serialized tx. It is never signed or broadcast in dry-run.
+			var err error
+			pubkey, err = solana.NewPaperPublicKey()
+			if err != nil {
+				return swapResultMsg{err: fmt.Errorf("paper wallet: %w", err)}
+			}
+		} else {
 			return swapResultMsg{err: fmt.Errorf("no wallet loaded")}
 		}
-		swapResp, err := m.jup.GetSwapTransaction(m.quote, m.wallet.PubKey.String())
+		swapResp, err := m.jup.GetSwapTransaction(m.quote, pubkey)
 		if err != nil {
 			return swapResultMsg{err: err}
 		}
