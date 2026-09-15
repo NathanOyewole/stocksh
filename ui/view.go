@@ -7,45 +7,75 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// boxWidth returns the total outer width (including the thick border) of the
-// centered panel. Capped so the layout stays readable — and looks intentional
-// rather than edge-to-edge — on very wide terminals.
-func (m Model) boxWidth() int {
-	w := m.width - 6
-	if w > 88 {
-		w = 88
-	}
-	if w < 44 {
-		w = 44
-	}
-	return w
-}
-
-// innerWidth is the usable text width inside the panel (outer box minus the
-// 1-col thick border and the 3-col horizontal padding on each side).
+// innerWidth is the usable text width inside the full-screen frame: the
+// terminal width minus the 1-cell thick border (2) and the 1-cell vertical
+// padding around the frame interior (6). Everything in the UI derives from
+// this, so resizing the terminal re-lays-out every screen automatically
+// (tea.WindowSizeMsg is delivered on every SIGWINCH / PowerShell window
+// resize).
 func (m Model) innerWidth() int {
-	return m.boxWidth() - 8
+	w := m.width
+	if w <= 0 {
+		w = 84 // sane default before the first WindowSizeMsg lands
+	}
+	if iw := w - 8; iw > 0 {
+		return iw
+	}
+	return 1
 }
 
-// bodyBudget returns the number of content lines that fit inside the panel
-// body for the current terminal height. Chrome (border, padding, the STOCK.sh
-// header line + rule, and the footer status bar + gap) reserves the rest, so a
-// body whose line count stays within this budget can never overflow the
-// viewport, scroll the terminal, or leave ghosted text behind.
+// frameHeight is the total height of the outer border box: the full viewport
+// minus the single external status/log row at the bottom, so the status line
+// never pushes the terminal into scrolling.
+func (m Model) frameHeight() int {
+	if m.height <= 0 {
+		return 0
+	}
+	h := m.height - 1
+	if h < 6 {
+		h = 6
+	}
+	return h
+}
+
+// bodyBudget returns the number of content lines a view may emit inside the
+// frame before the frame's own chrome is added: the border rows + padding (4),
+// the header row + rule (2), and the keybinding footer on the trading screens
+// (3: divider + two keybar rows). A body within this budget can never push
+// the frame past the viewport or leave ghosted lines behind.
 func (m Model) bodyBudget() int {
 	if m.height <= 0 {
 		return 1 << 20 // unknown viewport (pre-size frame / tests): never truncate
 	}
-	b := m.height - 9
-	if b < 3 {
-		return 3
+	rows := m.frameHeight()
+	rows -= 4 // top + bottom border rows + padding row above and below
+	rows -= 2 // header row + rule
+	if m.mode == viewTickers || m.mode == viewCustomAmount {
+		rows -= 3 // footer divider + keybinding bar (2 lines)
 	}
-	return b
+	if rows < 1 {
+		return 1
+	}
+	return rows
 }
 
-// fit caps an already-rendered body to the panel body height so no screen can
+// fit caps an already-rendered body to the frame body height so no screen can
 // exceed the terminal viewport. Trailing rows are dropped (a hint line marks
-// the cut) rather than letting them leak past the panel border.
+// the cut) rather than letting them leak past the frame border.
+// tableRuleWidth returns a responsive width for the decorative rules in the
+// auxiliary views (portfolio, history, watchlist), expanding with the
+// terminal width but never overflowing it.
+func (m Model) tableRuleWidth() int {
+	w := m.innerWidth() - 2
+	if w < 40 {
+		w = 40
+	}
+	if w > 80 {
+		w = 80
+	}
+	return w
+}
+
 func (m Model) fit(body string) string {
 	budget := m.bodyBudget()
 	if h := strings.Count(body, "\n") + 1; h <= budget {
@@ -59,13 +89,53 @@ func (m Model) fit(body string) string {
 	return strings.Join(out, "\n") + "\n" + m.styles.Dim.Render("  ▾ more entries — make the window taller")
 }
 
-// spaceBetween justifies left/right within width, padding with spaces.
+// spaceBetween justifies left/right within width, padding with spaces. On
+// widths too small to hold both sides it degrades to a clipped single line so
+// the row never overflows the frame.
 func spaceBetween(left, right string, width int) string {
 	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
-	if gap < 1 {
-		gap = 1
+	if gap >= 1 {
+		return left + strings.Repeat(" ", gap) + right
 	}
-	return left + strings.Repeat(" ", gap) + right
+	return clip(left+" "+right, width)
+}
+
+// fitLine truncates a rendered line to at most width cells with an ellipsis,
+// so footer/header rows can never wrap on narrow terminals.
+func fitLine(s string, width int) string {
+	if width < 1 {
+		return ""
+	}
+	if lipgloss.Width(s) <= width {
+		return pad(s, width)
+	}
+	return clip(s, width) + strings.Repeat(" ", max(0, width-lipgloss.Width(clip(s, width))))
+}
+
+// ralign right-aligns s within width cells (used for numeric columns).
+func ralign(s string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	n := lipgloss.Width(s)
+	if n >= width {
+		return s
+	}
+	return strings.Repeat(" ", width-n) + s
+}
+
+// fmtUsd renders a large USDC figure in compact form ($1.79M, $8.4B).
+func fmtUsd(v float64) string {
+	if v >= 1e9 {
+		return fmt.Sprintf("$%.2fB", v/1e9)
+	}
+	if v >= 1e6 {
+		return fmt.Sprintf("$%.2fM", v/1e6)
+	}
+	if v >= 1e3 {
+		return fmt.Sprintf("$%.1fK", v/1e3)
+	}
+	return fmt.Sprintf("$%.2f", v)
 }
 
 func (m Model) View() string {
@@ -73,80 +143,122 @@ func (m Model) View() string {
 		return "Loading STOCK.sh..."
 	}
 
-	var view string
-
 	if m.mode == viewSplash {
-		view = lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, m.viewSplash())
-	} else {
-		var body string
-		switch m.mode {
-		case viewTickers, viewCustomAmount:
-			body = m.viewTickers()
-		case viewConfirm:
-			body = m.viewConfirm()
-		case viewResult:
-			body = m.viewResult()
-		case viewPortfolio:
-			body = m.viewPortfolio()
-		case viewHistory:
-			body = m.viewHistory()
-		case viewWatchlist:
-			body = m.viewWatchlist()
-		case viewActivity:
-			body = m.viewActivity()
-		case viewHelp:
-			body = m.viewHelp()
-		}
-
-		netBadge := m.styles.Yellow.Bold(true).Render("[ DEVNET ]")
-		if m.network == "mainnet" {
-			netBadge = m.styles.Green.Bold(true).Render("[ MAINNET ]")
-		}
-		modeBadge := m.styles.Cyan.Bold(true).Render("[ DRY-RUN ]")
-		if !m.dryRun {
-			modeBadge = m.styles.Error.Render("[ LIVE ]")
-		}
-
-		boxW := m.boxWidth()
-		innerW := m.innerWidth()
-
-		title := m.styles.Title.Render("STOCK.sh")
-		subtitle := m.styles.Cyan.Render(" Terminal xStocks")
-		badges := lipgloss.JoinHorizontal(lipgloss.Center, netBadge, "   ", modeBadge)
-
-		headerLine := spaceBetween(title+subtitle, badges, innerW)
-		rule := m.styles.Dim.Render(strings.Repeat("─", innerW))
-
-		// Center the screen's content as a block within the panel, instead of
-		// letting it hug the left edge when the panel is wider than the content.
-		centeredBody := lipgloss.PlaceHorizontal(innerW, lipgloss.Center, body)
-
-		panel := m.styles.Border.Width(boxW - 2).Render(
-			lipgloss.JoinVertical(lipgloss.Left, headerLine, rule, "", centeredBody),
-		)
-
-		status := m.styles.Status.Render(m.status)
-		if m.errMsg != "" {
-			status = m.styles.Error.Render("ERR: " + m.errMsg)
-		}
-		footer := lipgloss.PlaceHorizontal(boxW, lipgloss.Center, status)
-
-		stacked := lipgloss.JoinVertical(lipgloss.Center, panel, "", footer)
-
-		// Place pads every frame to the full width x height, overwriting all
-		// cells, which prevents ghosting from screen-sized differences.
-		view = lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, stacked)
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, m.viewSplash())
 	}
 
-	// Hard guard: never emit more lines than the viewport has, so the terminal
-	// never scrolls and no ghosted fragments survive below the panel.
-	if m.height > 0 {
-		if h := strings.Count(view, "\n") + 1; h > m.height {
-			lines := strings.Split(view, "\n")
-			view = strings.Join(lines[:m.height], "\n")
+	var body, footer string
+	switch m.mode {
+	case viewTickers, viewCustomAmount:
+		body = m.viewTickers()
+		footer = m.viewFooter()
+	case viewConfirm:
+		body = m.viewConfirm()
+	case viewResult:
+		body = m.viewResult()
+	case viewPortfolio:
+		body = m.viewPortfolio()
+	case viewHistory:
+		body = m.viewHistory()
+	case viewWatchlist:
+		body = m.viewWatchlist()
+	case viewActivity:
+		body = m.viewActivity()
+	case viewHelp:
+		body = m.viewHelp()
+	}
+
+	return m.frame(body, footer)
+}
+
+// frame builds the full-screen dashboard: a header row (brand left, network /
+// mode badges right), a rule, the view body, an optional keybinding footer,
+// all inside the full-width outer border, with the live status/log line pinned
+// to its own final row below the frame. The frame is explicitly padded to the
+// viewport so every cell is overwritten every frame and nothing ghosts, and
+// every inner line is clamped to the exact content width so the border never
+// overruns the terminal.
+func (m Model) frame(body, footer string) string {
+	inner := m.innerWidth()
+	rule := m.styles.Dim.Render(strings.Repeat("─", inner))
+
+	// Content area height: the frame box minus its 2 border rows and its 1-row
+	// top/bottom padding. Everything above the border must fit exactly there.
+	contentH := m.frameHeight() - 4
+
+	parts := []string{m.headerLine(), rule, body}
+	if footer != "" {
+		parts = append(parts, footer)
+	}
+	content := strings.Join(parts, "\n")
+	if n := strings.Count(content, "\n") + 1; n > contentH {
+		// The keybinding footer is the last to give way on cramped terminals.
+		if footer != "" {
+			parts = parts[:3]
+			content = strings.Join(parts, "\n")
+		}
+		if n := strings.Count(content, "\n") + 1; n > contentH {
+			lines := strings.Split(content, "\n")
+			content = strings.Join(lines[:contentH], "\n")
 		}
 	}
-	return view
+	if gap := contentH - (strings.Count(content, "\n") + 1); gap > 0 {
+		content += strings.Repeat("\n", gap)
+	}
+
+	panel := m.styles.Border.Render(content)
+	stacked := panel + "\n" + m.statusBar()
+	return lipgloss.Place(m.width, m.height, lipgloss.Top, lipgloss.Left, stacked)
+}
+
+// headerLine anchors "[ STOCK.sh ] Terminal xStocks" top-left and the
+// network/mode badges flush to the right edge, spaced to the exact frame width.
+func (m Model) headerLine() string {
+	left := m.styles.Green.Bold(true).Render("[ ") +
+		m.styles.Title.Render("STOCK.sh") +
+		m.styles.Green.Bold(true).Render(" ]") +
+		m.styles.Cyan.Render("  Terminal xStocks")
+	return spaceBetween(left, m.badges(), m.innerWidth())
+}
+
+func (m Model) badges() string {
+	netBadge := m.styles.Yellow.Bold(true).Render("[ DEVNET ]")
+	if m.network == "mainnet" {
+		netBadge = m.styles.Green.Bold(true).Render("[ MAINNET ]")
+	}
+	modeBadge := m.styles.Cyan.Bold(true).Render("[ DRY-RUN ]")
+	if !m.dryRun {
+		modeBadge = m.styles.Error.Render("[ LIVE ]")
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Center, netBadge, "  ", modeBadge)
+}
+
+// statusBar is the single bottom row reserved for the status/log line. It
+// always spans the full width so stale cells are overwritten.
+func (m Model) statusBar() string {
+	status := m.styles.Status.Render(m.status)
+	if m.errMsg != "" {
+		status = m.styles.Error.Render("ERR: " + m.errMsg)
+	}
+	return pad(clip(status, m.width), m.width)
+}
+
+// viewFooter is the full-width keybinding reference grouped across the bottom
+// of the frame into Navigation / Trade / Views & Actions.
+func (m Model) viewFooter() string {
+	inner := m.innerWidth()
+	nav := m.styles.Cyan.Bold(true).Render("NAVIGATION  ") +
+		m.styles.Dim.Render("j/k · ↑/↓ move    Enter quote   Esc back")
+	trd := m.styles.Cyan.Bold(true).Render("TRADE  ") +
+		m.styles.Dim.Render("s buy/sell  + / - size  c custom size  y confirm")
+	views := m.styles.Cyan.Bold(true).Render("VIEWS & ACTIONS  ") +
+		m.styles.Dim.Render("p/t portfolio·history  w watchlist  * track  r refresh")
+	sys := m.styles.Dim.Render("i activity  a airdrop  ? help  q quit")
+
+	rule := m.styles.Dim.Render(strings.Repeat("─", inner))
+	line1 := fitLine(spaceBetween(nav, trd, inner), inner)
+	line2 := fitLine(spaceBetween(views, sys, inner), inner)
+	return strings.Join([]string{rule, line1, line2}, "\n")
 }
 
 // sparkline renders a compact price-trend bar (▁▂▃▄▅▆▇█) from recent history.
@@ -223,7 +335,7 @@ func (m Model) viewSplash() string {
 
 func (m Model) viewTickers() string {
 	inner := m.innerWidth()
-	symW, priceW, chgW, sparkW, sizeW := tickerCols(inner)
+	symW, priceW, chgW, trendW, liqW, markW, posW, posValW, pnlW, sizeW := tickerCols(inner)
 
 	sideLabel := m.styles.Green.Bold(true).Render("BUY")
 	if m.side == "sell" {
@@ -239,25 +351,33 @@ func (m Model) viewTickers() string {
 	var b strings.Builder
 	b.WriteString(spaceBetween(m.styles.Header.Render("TICKERS"), headRight, inner))
 	b.WriteString("\n")
-	b.WriteString(m.styles.Dim.Render("  " + strings.Repeat("─", inner-2)))
-	b.WriteString("\n")
 
 	if len(m.tickers) == 0 {
-		b.WriteString("\n  " + m.styles.Dim.Render("Loading market data..."))
+		b.WriteString("  " + m.styles.Dim.Render("Loading market data..."))
 		b.WriteString("\n")
 		return b.String()
 	}
 
 	// Column header aligned to the same column template as the rows.
-	b.WriteString(m.styles.Dim.Render(fmt.Sprintf("  %s  %-*s  %-*s  %-*s  %-*s  %-*s",
-		"  ", symW, "SYMBOL", priceW, "PRICE", chgW, "24H", sparkW, "TREND", sizeW, "SIZE")))
+	headCells := []string{
+		pad(clip("SYMBOL", symW), symW),
+		pad(clip("PRICE", priceW), priceW),
+		pad(clip("24H", chgW), chgW),
+		pad(clip("TREND", trendW), trendW),
+		pad(clip("LIQ", liqW), liqW),
+		pad(clip("MARK", markW), markW),
+		pad(clip("POS", posW), posW),
+		pad(clip("POS VAL", posValW), posValW),
+		pad(clip("P&L", pnlW), pnlW),
+		pad(clip("SIZE", sizeW), sizeW),
+	}
+	b.WriteString(m.styles.Dim.Render(pad(strings.Join(headCells, "  "), inner)))
 	b.WriteString("\n\n")
 
-	// Size the visible row window to the panel body height so the docked
-	// status line and footer stay on screen and nothing scrolls the viewport.
-	chrome := 6 // title + rule + col header + blank + blank + dock status
+	// Row window: rows that fit between the section header and the frame footer.
+	chrome := 3 // section line + col header + blank
 	if m.mode == viewCustomAmount {
-		chrome = 7 // title + rule + col header + blank + blank + prompt + hint
+		chrome = 5 // ... + custom prompt + hint line
 	}
 	window := m.bodyBudget() - chrome
 	if window < 1 {
@@ -290,44 +410,100 @@ func (m Model) viewTickers() string {
 		if chg == "" {
 			chg = "-"
 		}
-		size := fmt.Sprintf("%.0f USDC", m.amountUSDC)
-		spk := sparkline(t.History, sparkW)
 
-		raw := "  " +
-			pad(t.Symbol, symW) + "  " +
-			pad(price, priceW) + "  " +
-			pad(chg, chgW) + "  " +
-			pad(spk, sparkW) + "  " +
-			pad(size, sizeW)
-
-		star := "  "
-		if t.Watch {
-			star = m.styles.Yellow.Render("★ ")
+		posQty := 0.0
+		posHas := false
+		pnlStr := "–"
+		if m.led != nil {
+			h := m.led.Holding(t.Symbol, t.PriceV)
+			posQty, posHas = h.Qty, h.Qty > 0
+			if h.HasBasis && h.Qty > 0 {
+				if h.PnLPct >= 0 {
+					pnlStr = fmt.Sprintf("+%.1f%%", h.PnLPct)
+				} else {
+					pnlStr = fmt.Sprintf("%.1f%%", h.PnLPct)
+				}
+			}
 		}
+		posS := "–"
+		posValS := "–"
+		if posHas {
+			posS = fmt.Sprintf("%.2f", posQty)
+			if t.PriceV > 0 {
+				posValS = fmt.Sprintf("$%.2f", posQty*t.PriceV)
+			}
+		}
+		liqS := fmtUsd(t.Liquidity)
+		if t.Liquidity <= 0 {
+			liqS = "–"
+		}
+		markS := fmt.Sprintf("$%.2f", t.Mark)
+		if t.Mark <= 0 {
+			markS = "–"
+		}
+		sizeS := fmt.Sprintf("%.0f", m.amountUSDC)
+		spk := sparkline(t.History, trendW)
+
+		// non-watch rows keep a blank 2-cell gutter so the symbol column stays
+		// aligned with watched rows; the watched star lives inside the cell.
+		symPlain := "  "
+		if t.Watch {
+			symPlain = "★ "
+		}
+		symColored := "  "
+		if t.Watch {
+			symColored = m.styles.Yellow.Render("★ ")
+		}
+
+		// raw cells (used for the full-width selected highlight).
+		plain := strings.Join([]string{
+			pad(clip(symPlain+t.Symbol, symW), symW),
+			ralign(clip(price, priceW), priceW),
+			ralign(clip(chg, chgW), chgW),
+			pad(clip(spk, trendW), trendW),
+			ralign(clip(liqS, liqW), liqW),
+			ralign(clip(markS, markW), markW),
+			ralign(clip(posS, posW), posW),
+			ralign(clip(posValS, posValW), posValW),
+			ralign(clip(pnlStr, pnlW), pnlW),
+			ralign(clip(sizeS, sizeW), sizeW),
+		}, "  ")
+
+		// colored cells for the non-selected rows
+		chgCol := pad(clip(chg, chgW), chgW)
+		if strings.HasPrefix(chg, "+") {
+			chgCol = m.styles.Green.Render(pad(clip(chg, chgW), chgW))
+		} else if strings.HasPrefix(chg, "-") {
+			chgCol = m.styles.Error.Render(pad(clip(chg, chgW), chgW))
+		} else {
+			chgCol = m.styles.Dim.Render(pad(clip(chg, chgW), chgW))
+		}
+		pnlCol := ralign(clip(pnlStr, pnlW), pnlW)
+		if strings.HasPrefix(pnlStr, "+") {
+			pnlCol = m.styles.Green.Render(ralign(clip(pnlStr, pnlW), pnlW))
+		} else if strings.HasPrefix(pnlStr, "-") {
+			pnlCol = m.styles.Error.Render(ralign(clip(pnlStr, pnlW), pnlW))
+		}
+		colored := strings.Join([]string{
+			pad(clip(symColored+t.Symbol, symW), symW),
+			ralign(clip(price, priceW), priceW),
+			chgCol,
+			m.styles.Cyan.Render(pad(clip(spk, trendW), trendW)),
+			m.styles.Dim.Render(ralign(clip(liqS, liqW), liqW)),
+			m.styles.Green.Render(ralign(clip(markS, markW), markW)),
+			m.styles.Dim.Render(ralign(clip(posS, posW), posW)),
+			m.styles.Dim.Render(ralign(clip(posValS, posValW), posValW)),
+			pnlCol,
+			m.styles.Dim.Render(ralign(clip(sizeS, sizeW), sizeW)),
+		}, "  ")
+
 		if i == m.cursor {
-			b.WriteString(star)
-			b.WriteString(m.styles.Selected.Render(raw))
+			// the row highlight spans the full table width
+			b.WriteString(m.styles.Selected.Render(pad(plain, inner)))
 			b.WriteString("\n")
 			continue
 		}
-
-		b.WriteString(star)
-		b.WriteString("  ")
-		b.WriteString(pad(t.Symbol, symW))
-		b.WriteString("  ")
-		b.WriteString(pad(price, priceW))
-		b.WriteString("  ")
-		if strings.HasPrefix(chg, "+") {
-			b.WriteString(m.styles.Green.Render(pad(chg, chgW)))
-		} else if strings.HasPrefix(chg, "-") {
-			b.WriteString(m.styles.Error.Render(pad(chg, chgW)))
-		} else {
-			b.WriteString(m.styles.Dim.Render(pad(chg, chgW)))
-		}
-		b.WriteString("  ")
-		b.WriteString(m.styles.Cyan.Render(pad(spk, sparkW)))
-		b.WriteString("  ")
-		b.WriteString(pad(size, sizeW))
+		b.WriteString(pad(colored, inner))
 		b.WriteString("\n")
 	}
 
@@ -336,14 +512,14 @@ func (m Model) viewTickers() string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString("\n")
 	if m.mode == viewCustomAmount {
+		b.WriteString("\n")
 		b.WriteString("  " + m.styles.Header.Render("Custom amount (USDC): $"+m.customBuf+"_"))
 		b.WriteString("\n" + m.styles.Dim.Render("  Enter to confirm   ·   Esc to cancel   ·   backspace to delete"))
-	} else {
-		b.WriteString(m.styles.Dim.Render("  [?] Help  [q] Quit  │  Live prices via Jupiter · auto-refresh every 5s"))
 	}
-	return b.String()
+	// final clamp: the frame needs the body within bodyBudget; if a tiny
+	// viewport somehow exceeds it, truncate rather than push past the border.
+	return m.fit(b.String())
 }
 
 func (m Model) viewConfirm() string {
@@ -539,7 +715,7 @@ func (m Model) renderPositions() string {
 		"SYMBOL", "QTY", "PRICE", "VALUE", "P&L", "P&L%", "ALLOC")
 	b.WriteString(m.styles.Dim.Render(head))
 	b.WriteString("\n")
-	b.WriteString(m.styles.Dim.Render("  " + strings.Repeat("─", 56)))
+	b.WriteString(m.styles.Dim.Render("  " + strings.Repeat("─", m.tableRuleWidth())))
 	b.WriteString("\n")
 
 	for _, p := range positions {
@@ -589,7 +765,7 @@ func (m Model) renderPositions() string {
 	if avgTotalCost > 0 {
 		totalPct = totalPnL / avgTotalCost * 100
 	}
-	b.WriteString(m.styles.Dim.Render("  " + strings.Repeat("─", 56)))
+	b.WriteString(m.styles.Dim.Render("  " + strings.Repeat("─", m.tableRuleWidth())))
 	b.WriteString("\n")
 	totalLine := fmt.Sprintf("  %-7s %9s  %-9s %-10s ", "TOTAL", "", "", fmt.Sprintf("$%.2f", totalValue))
 	if totalPnL >= 0 {
@@ -637,7 +813,7 @@ func (m Model) viewHistory() string {
 	head := fmt.Sprintf("  %-8s %-7s %-4s %-12s %-10s %-10s", "TIME", "SYMBOL", "SIDE", "QTY", "PRICE", "TOTAL")
 	b.WriteString(m.styles.Dim.Render(head))
 	b.WriteString("\n")
-	b.WriteString(m.styles.Dim.Render("  " + strings.Repeat("─", 56)))
+	b.WriteString(m.styles.Dim.Render("  " + strings.Repeat("─", m.tableRuleWidth())))
 	b.WriteString("\n")
 
 	// newest first
@@ -685,7 +861,7 @@ func (m Model) viewWatchlist() string {
 	head := fmt.Sprintf("  %-7s %-10s %-8s %-9s %-9s %s", "SYMBOL", "PRICE", "24h", "TREND", "TARGET", "ALERT")
 	b.WriteString(m.styles.Dim.Render(head))
 	b.WriteString("\n")
-	b.WriteString(m.styles.Dim.Render("  " + strings.Repeat("─", 56)))
+	b.WriteString(m.styles.Dim.Render("  " + strings.Repeat("─", m.tableRuleWidth())))
 	b.WriteString("\n")
 
 	for pos, ti := range watched {
@@ -834,7 +1010,7 @@ func keyBindings() []helpGroup {
 			{"i", "activity feed (trades + events)"},
 			{"0", "back to the splash screen"},
 			{"r", "refresh prices & balances"},
-			{"a", "airdrop SOL (devnet only)"},
+			{"a", "airdrop SOL (+1 paper / devnet faucet)"},
 		}},
 	}
 }
@@ -920,32 +1096,55 @@ func pad(s string, w int) string {
 	return s + strings.Repeat(" ", w-lipgloss.Width(s))
 }
 
-// tickerCols returns responsive column widths for the ticker table given the
-// available inner panel width. Wide terminals keep the full table; narrow ones
-// progressively drop sparkline, numeric, and symbol column width so it fits.
-func tickerCols(inner int) (sym, price, chg, spark, size int) {
-	sym, price, chg, spark, size = 9, 12, 9, 8, 10
-	const minSym, minPrice, minChg, minSpark, minSize = 6, 5, 5, 5, 8
-	total := sym + price + chg + spark + size + 12 // star col + 5 gaps
-	if inner >= total {
-		return sym, price, chg, spark, size
+// tickerCols returns responsive column widths for the 10-column trading table
+// given the available frame width. Wide terminals get the full table plus a
+// long trend/sparkline column; narrow ones shrink every column before the
+// trend column, which is the last to give up space.
+func tickerCols(inner int) (sym, price, chg, trend, liq, mark, pos, posVal, pnl, size int) {
+	sym, price, chg, liq, mark, pos, posVal, pnl, size = 8, 10, 7, 10, 9, 7, 11, 8, 9
+	fixed := func() int { return sym + price + chg + liq + mark + pos + posVal + pnl + size + 18 }
+	const minT = 12
+
+	trend = inner - fixed()
+	if trend >= minT {
+		return sym, price, chg, trend, liq, mark, pos, posVal, pnl, size
 	}
-	for total > inner {
-		switch {
-		case spark > minSpark:
-			spark--
-		case price > minPrice:
-			price--
-		case chg > minChg:
-			chg--
-		case sym > minSym:
-			sym--
-		case size > minSize:
-			size--
-		default:
-			return sym, price, chg, spark, size
+
+	// Not enough room: shrink the fixed columns (largest / least essential
+	// first) until the trend/sparkline achieves its minimum width. The price
+	// and mark columns give up space before the symbol and POS columns.
+	cols := []*int{&price, &mark, &liq, &posVal, &sym, &size, &pnl, &pos, &chg}
+	floors := []int{6, 6, 7, 7, 5, 6, 6, 5, 5}
+	for trend < minT {
+		shrank := false
+		for i := range cols {
+			if *cols[i] > floors[i] {
+				*cols[i]--
+				shrank = true
+				trend = inner - fixed()
+				break
+			}
 		}
-		total--
+		if !shrank {
+			break
+		}
 	}
-	return sym, price, chg, spark, size
+
+	// Absolute guarantee: trend is never zero/negative and the returned table
+	// is never wider than inner. Only at absurdly narrow widths does this trim
+	// columns below their normal floors.
+	if trend < 1 {
+		trend = 1
+	}
+	i := 0
+	all := []*int{&sym, &price, &chg, &liq, &mark, &pos, &posVal, &pnl, &size}
+	for fixed()+trend > inner {
+		if *all[i] > 1 {
+			*all[i]--
+		} else if trend > 1 {
+			trend--
+		}
+		i = (i + 1) % len(all)
+	}
+	return sym, price, chg, trend, liq, mark, pos, posVal, pnl, size
 }

@@ -28,29 +28,32 @@ func TestPadNoTruncate(t *testing.T) {
 }
 
 func TestTickerColsWide(t *testing.T) {
-	sym, price, chg, spark, size := tickerCols(80)
-	if sym != 9 || price != 12 || chg != 9 || spark != 8 || size != 10 {
-		t.Fatalf("full columns: %v", []int{sym, price, chg, spark, size})
+	sym, price, chg, trend, liq, mark, pos, posVal, pnl, size := tickerCols(110)
+	want := []int{8, 10, 7, 13, 10, 9, 7, 11, 8, 9}
+	got := []int{sym, price, chg, trend, liq, mark, pos, posVal, pnl, size}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("wide columns = %v, want %v", got, want)
+		}
 	}
 }
 
-func TestTickerColsNarrow(t *testing.T) {
-	sym, price, chg, spark, size := tickerCols(46)
-	if spark >= 8 {
-		t.Fatalf("spark should shrink for narrow width, got %d", spark)
-	}
-	if price > 12 {
-		t.Fatalf("price should shrink for narrow width, got %d", price)
-	}
-	total := sym + price + chg + spark + size + 12
-	if total > 46 {
-		t.Fatalf("total %d > available %d", total, 46)
+func TestTickerColsFits(t *testing.T) {
+	for _, inner := range []int{30, 38, 46, 60, 72, 86, 100, 140} {
+		sym, price, chg, trend, liq, mark, pos, posVal, pnl, size := tickerCols(inner)
+		if trend < 1 {
+			t.Fatalf("inner=%d: trend = %d, want >= 1", inner, trend)
+		}
+		total := sym + price + chg + trend + liq + mark + pos + posVal + pnl + size + 18
+		if total > inner {
+			t.Fatalf("inner=%d: total %d > available", inner, total)
+		}
 	}
 }
 
 func TestViewTickersRenders(t *testing.T) {
 	m := InitialModel()
-	m.width = 86
+	m.width = 120
 	m.height = 30
 	m.dryRun = true
 	m.amountUSDC = 500
@@ -65,16 +68,16 @@ func TestViewTickersRenders(t *testing.T) {
 	if !strings.Contains(out, "TICKERS") {
 		t.Fatal("missing TICKERS header")
 	}
-	if !strings.Contains(out, "SYMBOL") {
+	if !strings.Contains(out, "PRICE") {
 		t.Fatal("missing column header")
 	}
-	if !strings.Contains(out, "NVDAx") {
-		t.Fatal("missing ticker row")
+	if !strings.Contains(out, "NVDA") {
+		t.Fatal("missing NVDAx ticker row")
 	}
-	if !strings.Contains(out, "AAPLx") {
-		t.Fatal("missing second ticker row")
+	if !strings.Contains(out, "AAPL") {
+		t.Fatal("missing AAPLx ticker row")
 	}
-	if !strings.Contains(out, "+1.2%") {
+	if !strings.Contains(out, "+1.2") {
 		t.Fatal("missing change value")
 	}
 	if !strings.Contains(out, "★") {
@@ -124,10 +127,11 @@ func TestFitCapsToViewportHeight(t *testing.T) {
 	}
 }
 
-func TestViewNeverExceedsViewportHeight(t *testing.T) {
+func TestViewNeverExceedsViewport(t *testing.T) {
 	m := InitialModel()
 	m.width = 60
 	m.height = 10
+	m.mode = viewTickers
 	m.dryRun = true
 	m.tickers = []Ticker{}
 	for i := 0; i < 30; i++ {
@@ -136,6 +140,45 @@ func TestViewNeverExceedsViewportHeight(t *testing.T) {
 	out := m.View()
 	if n := strings.Count(out, "\n") + 1; n > m.height {
 		t.Fatalf("View emitted %d lines, terminal has %d:\n%s", n, m.height, out)
+	}
+	for i, line := range strings.Split(out, "\n") {
+		w := lipgloss.Width(strings.TrimRight(line, " "))
+		if w > m.width {
+			t.Fatalf("line %d is %d cells wide (viewport %d):\n%q", i, w, m.width, line)
+		}
+	}
+}
+
+func TestFrameFillsViewportExactly(t *testing.T) {
+	m := InitialModel()
+	m.width = 100
+	m.height = 40
+	m.mode = viewTickers
+	m.dryRun = true
+	m.tickers = []Ticker{}
+	for i := 0; i < 60; i++ {
+		m.tickers = append(m.tickers, Ticker{Symbol: "SYM", Price: "$1.00", Change: "+1.0%"})
+	}
+	out := m.View()
+	if n := strings.Count(out, "\n") + 1; n != m.height {
+		t.Fatalf("View emitted %d lines, want exactly %d:\n%s", n, m.height, out)
+	}
+	for i, line := range strings.Split(out, "\n") {
+		w := lipgloss.Width(strings.TrimRight(line, " "))
+		if w > m.width {
+			t.Fatalf("line %d is %d cells wide (viewport %d):\n%q", i, w, m.width, line)
+		}
+	}
+	// the border box must sit at the very top and the status row at the bottom
+	lines := strings.Split(out, "\n")
+	if !strings.HasPrefix(lines[0], "┏") {
+		t.Fatalf("top border missing:\n%q", lines[0])
+	}
+	if !strings.HasPrefix(lines[m.height-2], "┗") {
+		t.Fatalf("bottom border missing:\n%q", lines[m.height-2])
+	}
+	if strings.TrimRight(lines[m.height-1], " ") == "" {
+		t.Fatalf("status/log line missing at bottom row:\n%q", lines[m.height-1])
 	}
 }
 

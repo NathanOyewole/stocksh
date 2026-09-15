@@ -26,35 +26,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, splashCmd()
 	case tea.KeyMsg:
-		if m.mode == viewSplash {
-			m.mode = viewTickers
-			if m.wallet != nil {
-				m.status = fmt.Sprintf("Wallet %s \u00b7 %s \u00b7 DRY-RUN", truncatePubkey(m.wallet.PubKey.String()), m.network)
-			} else {
-				m.status = "No wallet found - set SOLANA_PRIVATE_KEY for live trading"
-			}
-			return m, nil
+		old := m.mode
+		md, cmd := m.handleKey(msg)
+		// Any view switch repaints the whole alternate screen so no fragments
+		// of the previous view (or a resize) ever ghost behind the new one.
+		if md.(Model).mode != old && cmd != nil {
+			return md, tea.Batch(cmd, tea.ClearScreen)
 		}
-		switch m.mode {
-		case viewTickers:
-			return m.updateTickers(msg)
-		case viewCustomAmount:
-			return m.updateCustomAmount(msg)
-		case viewConfirm:
-			return m.updateConfirm(msg)
-		case viewResult:
-			return m.updateResult(msg)
-		case viewPortfolio:
-			return m.updatePortfolio(msg)
-		case viewHistory:
-			return m.updateHistory(msg)
-		case viewWatchlist:
-			return m.updateWatchlist(msg)
-		case viewHelp:
-			return m.updateHelp(msg)
-		case viewActivity:
-			return m.updateActivity(msg)
-		}
+		return md, cmd
 	case walletLoadedMsg:
 		if msg.err != nil {
 			m.status = "No wallet (set SOLANA_PRIVATE_KEY for live / portfolio)"
@@ -116,6 +95,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if p, ok := msg.prices[t.Mint]; ok {
 					m.tickers[i].PriceV = p.USDPrice
 					m.tickers[i].Price = fmt.Sprintf("$%.2f", p.USDPrice)
+					m.tickers[i].Mark = p.USDPrice
+					if p.Stock != nil && p.Stock.Price > 0 {
+						m.tickers[i].Mark = p.Stock.Price
+					}
+					m.tickers[i].Liquidity = p.Liquidity
 					m.tickers[i].ChgV = p.PriceChange24h
 					if p.PriceChange24h >= 0 {
 						m.tickers[i].Change = fmt.Sprintf("+%.1f%%", p.PriceChange24h)
@@ -169,6 +153,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.mode == viewSplash {
+		m.mode = viewTickers
+		if m.wallet != nil {
+			m.status = fmt.Sprintf("Wallet %s \u00b7 %s \u00b7 DRY-RUN", truncatePubkey(m.wallet.PubKey.String()), m.network)
+		} else {
+			m.status = "No wallet found - set SOLANA_PRIVATE_KEY for live trading"
+		}
+		return m, nil
+	}
+	switch m.mode {
+	case viewTickers:
+		return m.updateTickers(msg)
+	case viewCustomAmount:
+		return m.updateCustomAmount(msg)
+	case viewConfirm:
+		return m.updateConfirm(msg)
+	case viewResult:
+		return m.updateResult(msg)
+	case viewPortfolio:
+		return m.updatePortfolio(msg)
+	case viewHistory:
+		return m.updateHistory(msg)
+	case viewWatchlist:
+		return m.updateWatchlist(msg)
+	case viewHelp:
+		return m.updateHelp(msg)
+	case viewActivity:
+		return m.updateActivity(msg)
+	}
+	return m, nil
+}
+
 func (m Model) updateTickers(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "q", "ctrl+c":
@@ -191,10 +208,12 @@ func (m Model) updateTickers(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.amountUSDC > 500 {
 			m.amountUSDC = 500
 		}
+		m.status = fmt.Sprintf("Size set to $%.0f USDC", m.amountUSDC)
 	case "-", "_":
 		if m.amountUSDC > 5 {
 			m.amountUSDC -= 5
 		}
+		m.status = fmt.Sprintf("Size set to $%.0f USDC", m.amountUSDC)
 	case "s":
 		if m.side == "buy" {
 			m.side = "sell"

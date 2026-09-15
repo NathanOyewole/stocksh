@@ -30,16 +30,18 @@ const (
 )
 
 type Ticker struct {
-	Symbol  string
-	Mint    string
-	Price   string
-	PriceV  float64
-	Change  string
-	ChgV    float64
-	History []float64
-	Watch   bool
-	Alert   float64 // 0 = no alert; otherwise target price in USD
-	alertUp bool    // last known relationship of price to target
+	Symbol    string
+	Mint      string
+	Price     string
+	PriceV    float64
+	Change    string
+	ChgV      float64
+	History   []float64
+	Watch     bool
+	Alert     float64 // 0 = no alert; otherwise target price in USD
+	alertUp   bool    // last known relationship of price to target
+	Mark      float64 // reference/mark price from the stock oracle (falls back to PriceV)
+	Liquidity float64 // real USDC liquidity reported by Jupiter
 }
 
 type Model struct {

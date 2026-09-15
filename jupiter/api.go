@@ -50,9 +50,19 @@ type SwapResponse struct {
 }
 
 type PriceInfo struct {
-	USDPrice       float64 `json:"usdPrice"`
-	PriceChange24h float64 `json:"priceChange24h"`
-	Decimals       int     `json:"decimals"`
+	USDPrice       float64    `json:"usdPrice"`
+	PriceChange24h float64    `json:"priceChange24h"`
+	Decimals       int        `json:"decimals"`
+	Liquidity      float64    `json:"liquidity"`
+	Stock          *StockData `json:"stockData"`
+}
+
+// StockData carries the xStocks reference feed (the mark price and market cap
+// published by the stock's own oracle, distinct from Jupiter's swap price).
+type StockData struct {
+	ID    string  `json:"id"`
+	Price float64 `json:"price"`
+	Mcap  float64 `json:"mcap"`
 }
 
 type Client struct {
