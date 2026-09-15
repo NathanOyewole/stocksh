@@ -50,6 +50,8 @@ cp .env.example .env
 | y | Confirm / prepare tx |
 | p | Portfolio |
 | t | Trade history |
+| w | Watchlist + alerts |
+| * | Star / track symbol |
 | ? / h | Help |
 | r | Refresh |
 | a | Airdrop 1 SOL (Devnet) |
